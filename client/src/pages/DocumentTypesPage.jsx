@@ -1,6 +1,21 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { apiFetch, apiUpload, fetchFileUrl } from '../utils/api';
-import { STRINGS } from '../constants/strings';
+import {
+  Plus,
+  Search,
+  Pencil,
+  Power,
+  PowerOff,
+  CheckCircle2,
+  CircleDot,
+  UploadCloud,
+  X,
+  AlertCircle,
+  FileText,
+  MapPin,
+  Globe,
+  ImageIcon,
+} from 'lucide-react';
 
 const EMPTY_FORM = {
   shortName: '',
@@ -40,7 +55,6 @@ export default function DocumentTypesPage() {
   const [existingImageUrl, setExistingImageUrl] = useState(null);
   const fileInputRef = useRef(null);
 
-  // Fetch document types
   const loadItems = async () => {
     setLoading(true);
     const { ok, data } = await apiFetch('/document-types');
@@ -54,7 +68,6 @@ export default function DocumentTypesPage() {
     loadItems();
   }, []);
 
-  // Distinct categories for autocomplete datalist
   const distinctCategories = useMemo(() => {
     const set = new Set();
     items.forEach((item) => {
@@ -65,7 +78,6 @@ export default function DocumentTypesPage() {
     return Array.from(set).sort();
   }, [items]);
 
-  // Filtered and searched items
   const filteredItems = useMemo(() => {
     return items.filter((item) => {
       if (filterStatus === 'active' && !item.active) return false;
@@ -81,7 +93,6 @@ export default function DocumentTypesPage() {
     });
   }, [items, filterStatus, search]);
 
-  // Clean up object URLs on unmount or file change
   useEffect(() => {
     return () => {
       if (imagePreviewUrl) URL.revokeObjectURL(imagePreviewUrl);
@@ -138,7 +149,6 @@ export default function DocumentTypesPage() {
     setImagePreviewUrl(null);
     setExistingImageUrl(null);
 
-    // If an example image exists, fetch a signed/authenticated object URL
     if (item.exampleImageFileId) {
       const url = await fetchFileUrl(item.exampleImageFileId);
       if (url) setExistingImageUrl(url);
@@ -166,7 +176,6 @@ export default function DocumentTypesPage() {
     setImagePreviewUrl(URL.createObjectURL(file));
   };
 
-  // Toggle active status via PATCH (soft delete / reactivate)
   const handleToggleActive = async (item) => {
     setActionLoadingId(item._id);
     const newActive = !item.active;
@@ -186,7 +195,6 @@ export default function DocumentTypesPage() {
     e.preventDefault();
     setFormError('');
 
-    // Client-side validations
     if (!formData.shortName.trim()) {
       setFormError('Short name is required.');
       return;
@@ -217,7 +225,6 @@ export default function DocumentTypesPage() {
 
     setFormSubmitting(true);
 
-    // Build payload
     const payload = {
       shortName: formData.shortName.trim(),
       fullName: formData.fullName.trim(),
@@ -246,22 +253,15 @@ export default function DocumentTypesPage() {
       payload.slug = formData.slug.trim().toLowerCase();
     }
 
-    // Code handling:
-    // If creating: omit field entirely if blank!
-    // If editing: only send if changed (e.g. setting code for first time)
     const trimmedCode = formData.code.trim();
     if (!editingItem) {
       if (trimmedCode) payload.code = trimmedCode.toUpperCase();
     } else {
-      // Editing existing item: if item had no code and now has one:
       if (!editingItem.code && trimmedCode) {
         payload.code = trimmedCode.toUpperCase();
       }
     }
 
-    // Translation pricing:
-    // If hasTranslation is true, include translation prices.
-    // If false, DO NOT include them in payload (prevents rejection).
     if (formData.hasTranslation) {
       payload.pricing.originalPlusTranslation = {
         clientPrice: Number(formData.pricing.originalPlusTranslation.clientPrice),
@@ -298,7 +298,6 @@ export default function DocumentTypesPage() {
       savedDoc = data;
     }
 
-    // If an image file was selected, upload it now
     if (selectedFile && savedDoc?._id) {
       const uploadRes = await apiUpload(`/document-types/${savedDoc._id}/example-image`, selectedFile);
       if (!uploadRes.ok) {
@@ -316,48 +315,43 @@ export default function DocumentTypesPage() {
   return (
     <div>
       {/* Page Header */}
-      <div className="console-page-header">
+      <div className="admin-page-header">
         <div>
-          <h1 className="console-page-title">{STRINGS.docTypes.title}</h1>
-          <p className="console-page-subtitle">{STRINGS.docTypes.subtitle}</p>
+          <h1 className="admin-page-title">Document Types</h1>
+          <p className="admin-page-subtitle">
+            Catalog of official import documents, pricing tiers, and sourcing defaults.
+          </p>
         </div>
-        <button className="btn btn-primary" onClick={openCreateModal}>
-          {STRINGS.docTypes.createNew}
+        <button
+          type="button"
+          className="btn-admin-primary"
+          onClick={openCreateModal}
+        >
+          <Plus size={16} />
+          <span>New Document Type</span>
         </button>
       </div>
 
-      {/* Filter and Search Bar */}
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        gap: 'var(--space-md)',
-        marginBottom: 'var(--space-lg)',
-        flexWrap: 'wrap',
-      }}>
-        {/* Status Filter Tabs */}
-        <div style={{ display: 'flex', gap: 'var(--space-xs)', alignItems: 'center' }}>
-          <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--ink-2)', textTransform: 'uppercase' }}>
-            {STRINGS.common.filterByStatus}
-          </span>
+      {/* Toolbar: Filters and Search */}
+      <div className="admin-toolbar">
+        <div className="admin-filter-tabs">
           {['all', 'active', 'inactive'].map((status) => (
             <button
               key={status}
-              className={`btn btn-sm ${filterStatus === status ? 'btn-primary' : 'btn-secondary'}`}
+              type="button"
+              className={`admin-filter-tab ${filterStatus === status ? 'active' : ''}`}
               onClick={() => setFilterStatus(status)}
-              style={{ textTransform: 'capitalize' }}
             >
               {status}
             </button>
           ))}
         </div>
 
-        {/* Search */}
-        <div style={{ minWidth: 260 }}>
+        <div className="admin-search-wrapper">
+          <Search size={15} className="admin-search-icon" />
           <input
             type="search"
-            className="form-input"
-            style={{ minHeight: 34, fontSize: '0.8rem' }}
+            className="admin-search-input"
             placeholder="Search code, name, category…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
@@ -365,100 +359,130 @@ export default function DocumentTypesPage() {
         </div>
       </div>
 
-      {/* Table view */}
-      <div className="console-table-wrap">
-        <table className="console-table">
+      {/* Data Table */}
+      <div className="admin-card">
+        <table className="admin-table">
           <thead>
             <tr>
-              <th style={{ width: 80 }}>{STRINGS.docTypes.code}</th>
-              <th>{STRINGS.docTypes.shortName}</th>
-              <th>{STRINGS.docTypes.category}</th>
-              <th>{STRINGS.docTypes.defaultSource}</th>
-              <th style={{ textAlign: 'right' }}>{STRINGS.docTypes.clientPrice}</th>
-              <th style={{ width: 100, textAlign: 'center' }}>{STRINGS.common.status}</th>
-              <th style={{ width: 90, textAlign: 'right' }}>{STRINGS.common.actions}</th>
+              <th style={{ width: 80 }}>Code</th>
+              <th>Document Name</th>
+              <th>Category</th>
+              <th>Default Source</th>
+              <th className="align-right">Client Price</th>
+              <th className="align-center" style={{ width: 110 }}>Status</th>
+              <th className="align-right" style={{ width: 90 }}>Actions</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan="7" className="console-table-empty">
+                <td colSpan="7" className="admin-table-empty">
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-                    <span className="spinner" />
-                    <span>{STRINGS.common.loading}</span>
+                    <span className="admin-spinner" />
+                    <span>Loading documents…</span>
                   </div>
                 </td>
               </tr>
             ) : filteredItems.length === 0 ? (
               <tr>
-                <td colSpan="7" className="console-table-empty">
-                  {STRINGS.common.noRecords}
+                <td colSpan="7" className="admin-table-empty">
+                  No document types found.
                 </td>
               </tr>
             ) : (
               filteredItems.map((item) => (
                 <tr key={item._id} style={{ opacity: item.active ? 1 : 0.65 }}>
-                  <td className="mono" style={{ fontWeight: 600 }}>
-                    {item.code || <span style={{ color: 'var(--ink-2)' }}>—</span>}
+                  <td className="mono">
+                    {item.code || <span style={{ color: 'var(--admin-text-muted)' }}>—</span>}
                   </td>
                   <td>
-                    <div style={{ fontWeight: 600 }}>{item.shortName}</div>
-                    <div style={{ fontSize: '0.75rem', color: 'var(--ink-2)' }}>
+                    <div style={{ fontWeight: 600, color: 'var(--admin-text-primary)' }}>
+                      {item.shortName}
+                    </div>
+                    <div style={{ fontSize: 12, color: 'var(--admin-text-secondary)', marginTop: 1 }}>
                       {item.fullName}
                       {item.hasTranslation && (
-                        <span style={{ marginInlineStart: 6, color: 'var(--attention)', fontWeight: 600 }}>
-                          [+ Translation available]
+                        <span style={{ marginInlineStart: 8, color: 'var(--status-amber-text)', fontWeight: 500 }}>
+                          • Includes translation
                         </span>
                       )}
                     </div>
                   </td>
                   <td>
                     {item.category ? (
-                      <span className="badge badge-progress">{item.category}</span>
+                      <span className="admin-status">
+                        {item.category}
+                      </span>
                     ) : (
-                      <span style={{ color: 'var(--ink-2)', fontSize: '0.75rem' }}>—</span>
+                      <span style={{ color: 'var(--admin-text-muted)', fontSize: 12 }}>—</span>
                     )}
                   </td>
                   <td>
                     {item.defaultSource === 'local' ? (
-                      <span className="badge badge-ok">Local (Algeria)</span>
+                      <span className="admin-status is-local">
+                        <MapPin size={12} />
+                        <span>Local (Algeria)</span>
+                      </span>
                     ) : (
-                      <span className="badge badge-china">China</span>
+                      <span className="admin-status is-china">
+                        <Globe size={12} />
+                        <span>China</span>
+                      </span>
                     )}
                   </td>
-                  <td style={{ textAlign: 'right', fontWeight: 600 }}>
+                  <td className="align-right">
                     {item.pricing?.originalOnly?.clientPrice != null ? (
-                      <>
-                        <span>{item.pricing.originalOnly.clientPrice.toLocaleString()} DZD</span>
-                        <div style={{ fontSize: '0.7rem', color: 'var(--ink-2)', fontWeight: 400 }}>
+                      <div>
+                        <span style={{ fontWeight: 600, color: 'var(--admin-text-primary)' }}>
+                          {item.pricing.originalOnly.clientPrice.toLocaleString()} DZD
+                        </span>
+                        <div style={{ fontSize: 11.5, color: 'var(--admin-text-muted)' }}>
                           Cost: {item.pricing.originalOnly.costPrice?.toLocaleString() ?? 0} DZD
                         </div>
-                      </>
+                      </div>
                     ) : (
-                      <span style={{ color: 'var(--ink-2)' }}>—</span>
+                      <span style={{ color: 'var(--admin-text-muted)' }}>—</span>
                     )}
                   </td>
-                  <td style={{ textAlign: 'center' }}>
-                    <button
-                      className={`toggle-btn ${item.active ? 'is-active' : 'is-inactive'}`}
-                      onClick={() => handleToggleActive(item)}
-                      disabled={actionLoadingId === item._id}
-                      title="Click to toggle status"
-                    >
-                      {actionLoadingId === item._id ? (
-                        <span className="spinner" />
+                  <td className="align-center">
+                    <span className={`admin-status ${item.active ? 'is-active' : 'is-inactive'}`}>
+                      {item.active ? (
+                        <CheckCircle2 size={12} strokeWidth={2.2} />
                       ) : (
-                        <span>{item.active ? 'Active' : 'Inactive'}</span>
+                        <CircleDot size={12} strokeWidth={2.2} />
                       )}
-                    </button>
+                      <span>{item.active ? 'Active' : 'Inactive'}</span>
+                    </span>
                   </td>
-                  <td style={{ textAlign: 'right' }}>
-                    <button
-                      className="btn btn-secondary btn-sm"
-                      onClick={() => openEditModal(item)}
-                    >
-                      {STRINGS.common.edit}
-                    </button>
+                  <td className="align-right">
+                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                      <button
+                        type="button"
+                        className="btn-admin-icon"
+                        aria-label={`Edit ${item.shortName}`}
+                        title="Edit document type"
+                        onClick={() => openEditModal(item)}
+                      >
+                        <Pencil size={14} />
+                      </button>
+
+                      <button
+                        type="button"
+                        className={`btn-admin-icon ${item.active ? 'danger' : ''}`}
+                        aria-label={item.active ? 'Deactivate document type' : 'Activate document type'}
+                        title={item.active ? 'Deactivate' : 'Activate'}
+                        onClick={() => handleToggleActive(item)}
+                        disabled={actionLoadingId === item._id}
+                      >
+                        {actionLoadingId === item._id ? (
+                          <span className="admin-spinner" style={{ width: 12, height: 12 }} />
+                        ) : item.active ? (
+                          <PowerOff size={14} />
+                        ) : (
+                          <Power size={14} />
+                        )}
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))
@@ -474,235 +498,241 @@ export default function DocumentTypesPage() {
         ))}
       </datalist>
 
-      {/* Create / Edit Modal */}
+      {/* Create / Edit Modal Dialog */}
       {modalOpen && (
-        <div className="modal-backdrop" onClick={(e) => { if (e.target === e.currentTarget) closeModal(); }}>
-          <div className="modal-panel" role="dialog" aria-modal="true" aria-labelledby="modal-title">
-            <div className="modal-header">
-              <h2 id="modal-title" className="modal-title">
-                {editingItem ? STRINGS.docTypes.editTitle : STRINGS.docTypes.createTitle}
+        <div
+          className="admin-modal-backdrop"
+          onClick={(e) => { if (e.target === e.currentTarget) closeModal(); }}
+        >
+          <div className="admin-modal-panel" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+            <div className="admin-modal-header">
+              <h2 id="modal-title" className="admin-modal-title">
+                {editingItem ? 'Edit Document Type' : 'Create Document Type'}
               </h2>
               <button
-                className="modal-close"
+                type="button"
+                className="btn-admin-icon"
                 onClick={closeModal}
                 disabled={formSubmitting}
-                aria-label="Close"
+                aria-label="Close modal"
               >
-                ✕
+                <X size={16} />
               </button>
             </div>
 
             <form onSubmit={handleSubmit}>
-              <div className="modal-body">
+              <div className="admin-modal-body">
                 {formError && (
-                  <div className="console-alert console-alert-error" role="alert">
-                    {formError}
+                  <div className="admin-alert admin-alert-error" role="alert">
+                    <AlertCircle size={15} style={{ flexShrink: 0 }} />
+                    <span>{formError}</span>
                   </div>
                 )}
 
                 {/* Primary Identifiers */}
-                <div className="form-section">
-                  <div className="form-section-title">Core Identity</div>
-
-                  <div className="form-grid">
-                    <div className="form-group">
-                      <label className="form-label" htmlFor="doc-shortName">
-                        {STRINGS.docTypes.shortName} <span className="required">*</span>
-                      </label>
-                      <input
-                        id="doc-shortName"
-                        type="text"
-                        className="form-input"
-                        placeholder={STRINGS.docTypes.shortNamePlaceholder}
-                        value={formData.shortName}
-                        onChange={(e) => setFormData({ ...formData, shortName: e.target.value })}
-                        required
-                        disabled={formSubmitting}
-                      />
-                    </div>
-
-                    <div className="form-group">
-                      <label className="form-label" htmlFor="doc-code">
-                        {STRINGS.docTypes.code}
-                      </label>
-                      <input
-                        id="doc-code"
-                        type="text"
-                        className="form-input mono"
-                        placeholder={STRINGS.docTypes.codePlaceholder}
-                        value={formData.code}
-                        onChange={(e) => setFormData({ ...formData, code: e.target.value.toUpperCase() })}
-                        disabled={formSubmitting || (Boolean(editingItem) && Boolean(editingItem.code))}
-                      />
-                      <span className="form-hint">
-                        {editingItem?.code
-                          ? STRINGS.docTypes.codeImmutableNote
-                          : STRINGS.docTypes.codeHint}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="form-group">
-                    <label className="form-label" htmlFor="doc-fullName">
-                      {STRINGS.docTypes.fullName} <span className="required">*</span>
+                <div className="admin-form-grid">
+                  <div className="admin-form-group">
+                    <label className="admin-form-label" htmlFor="doc-shortName">
+                      Short Name <span className="required">*</span>
                     </label>
                     <input
-                      id="doc-fullName"
+                      id="doc-shortName"
                       type="text"
-                      className="form-input"
-                      placeholder={STRINGS.docTypes.fullNamePlaceholder}
-                      value={formData.fullName}
-                      onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
+                      className="admin-input"
+                      placeholder="e.g. Certificate of Conformity"
+                      value={formData.shortName}
+                      onChange={(e) => setFormData({ ...formData, shortName: e.target.value })}
                       required
                       disabled={formSubmitting}
                     />
                   </div>
 
-                  <div className="form-grid">
-                    <div className="form-group">
-                      <label className="form-label" htmlFor="doc-category">
-                        {STRINGS.docTypes.category}
-                      </label>
-                      <input
-                        id="doc-category"
-                        type="text"
-                        list="category-suggestions"
-                        className="form-input"
-                        placeholder={STRINGS.docTypes.categoryPlaceholder}
-                        value={formData.category}
-                        onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                        disabled={formSubmitting}
-                      />
-                      <span className="form-hint">{STRINGS.docTypes.categoryHint}</span>
-                    </div>
-
-                    <div className="form-group">
-                      <label className="form-label" htmlFor="doc-slug">
-                        {STRINGS.docTypes.slug}
-                      </label>
-                      <input
-                        id="doc-slug"
-                        type="text"
-                        className="form-input mono"
-                        placeholder={STRINGS.docTypes.slugPlaceholder}
-                        value={formData.slug}
-                        onChange={(e) => setFormData({ ...formData, slug: e.target.value.toLowerCase() })}
-                        disabled={formSubmitting}
-                      />
-                      <span className="form-hint">{STRINGS.docTypes.slugHint}</span>
-                    </div>
-                  </div>
-
-                  <div className="form-grid">
-                    <div className="form-group">
-                      <label className="form-label" htmlFor="doc-originLanguage">
-                        {STRINGS.docTypes.originLanguage}
-                      </label>
-                      <input
-                        id="doc-originLanguage"
-                        type="text"
-                        className="form-input"
-                        placeholder={STRINGS.docTypes.originLanguagePlaceholder}
-                        value={formData.originLanguage}
-                        onChange={(e) => setFormData({ ...formData, originLanguage: e.target.value })}
-                        disabled={formSubmitting}
-                      />
-                    </div>
-
-                    <div className="form-group">
-                      <label className="form-label" htmlFor="doc-defaultSource">
-                        {STRINGS.docTypes.defaultSource} <span className="required">*</span>
-                      </label>
-                      <select
-                        id="doc-defaultSource"
-                        className="form-select"
-                        value={formData.defaultSource}
-                        onChange={(e) => setFormData({ ...formData, defaultSource: e.target.value })}
-                        disabled={formSubmitting}
-                      >
-                        <option value="local">{STRINGS.docTypes.sourceLocal}</option>
-                        <option value="china">{STRINGS.docTypes.sourceChina}</option>
-                      </select>
-                    </div>
-                  </div>
-
-                  <div className="form-grid">
-                    <div className="form-group">
-                      <label className="form-label" htmlFor="doc-turnaround">
-                        {STRINGS.docTypes.turnaround}
-                      </label>
-                      <input
-                        id="doc-turnaround"
-                        type="number"
-                        min="0"
-                        className="form-input"
-                        placeholder={STRINGS.docTypes.turnaroundPlaceholder}
-                        value={formData.estimatedTurnaroundDays}
-                        onChange={(e) => setFormData({ ...formData, estimatedTurnaroundDays: e.target.value })}
-                        disabled={formSubmitting}
-                      />
-                    </div>
-
-                    <div className="form-group">
-                      <label className="form-label" htmlFor="doc-sortOrder">
-                        {STRINGS.docTypes.sortOrder}
-                      </label>
-                      <input
-                        id="doc-sortOrder"
-                        type="number"
-                        className="form-input"
-                        value={formData.sortOrder}
-                        onChange={(e) => setFormData({ ...formData, sortOrder: e.target.value })}
-                        disabled={formSubmitting}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="form-group">
-                    <label className="form-label" htmlFor="doc-description">
-                      {STRINGS.docTypes.description}
+                  <div className="admin-form-group">
+                    <label className="admin-form-label" htmlFor="doc-code">
+                      Code
                     </label>
-                    <textarea
-                      id="doc-description"
-                      className="form-textarea"
-                      placeholder={STRINGS.docTypes.descriptionPlaceholder}
-                      value={formData.description}
-                      onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                      disabled={formSubmitting}
-                    />
-                  </div>
-
-                  <label className="form-checkbox-row">
                     <input
-                      type="checkbox"
-                      checked={formData.active}
-                      onChange={(e) => setFormData({ ...formData, active: e.target.checked })}
-                      disabled={formSubmitting}
+                      id="doc-code"
+                      type="text"
+                      className="admin-input mono"
+                      placeholder="e.g. COC"
+                      value={formData.code}
+                      onChange={(e) => setFormData({ ...formData, code: e.target.value.toUpperCase() })}
+                      disabled={formSubmitting || (Boolean(editingItem) && Boolean(editingItem.code))}
                     />
-                    <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>Active (Catalog visibility)</span>
-                  </label>
+                    <span className="admin-form-hint">
+                      {editingItem?.code
+                        ? 'Code is immutable once set and cannot be altered.'
+                        : 'Optional unique code. Immutable once saved.'}
+                    </span>
+                  </div>
                 </div>
 
-                {/* Pricing Section */}
-                <div className="form-section">
-                  <div className="form-section-title">{STRINGS.docTypes.pricingSection}</div>
+                <div className="admin-form-group">
+                  <label className="admin-form-label" htmlFor="doc-fullName">
+                    Full Name <span className="required">*</span>
+                  </label>
+                  <input
+                    id="doc-fullName"
+                    type="text"
+                    className="admin-input"
+                    placeholder="Official full document title"
+                    value={formData.fullName}
+                    onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
+                    required
+                    disabled={formSubmitting}
+                  />
+                </div>
 
-                  {/* Standard Tier (Always required) */}
+                <div className="admin-form-grid">
+                  <div className="admin-form-group">
+                    <label className="admin-form-label" htmlFor="doc-category">
+                      Category
+                    </label>
+                    <input
+                      id="doc-category"
+                      type="text"
+                      list="category-suggestions"
+                      className="admin-input"
+                      placeholder="e.g. Customs, Technical"
+                      value={formData.category}
+                      onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                      disabled={formSubmitting}
+                    />
+                    <span className="admin-form-hint">Select existing or type a new category.</span>
+                  </div>
+
+                  <div className="admin-form-group">
+                    <label className="admin-form-label" htmlFor="doc-slug">
+                      Slug
+                    </label>
+                    <input
+                      id="doc-slug"
+                      type="text"
+                      className="admin-input mono"
+                      placeholder="Auto-generated if blank"
+                      value={formData.slug}
+                      onChange={(e) => setFormData({ ...formData, slug: e.target.value.toLowerCase() })}
+                      disabled={formSubmitting}
+                    />
+                    <span className="admin-form-hint">Unique URL-friendly identifier.</span>
+                  </div>
+                </div>
+
+                <div className="admin-form-grid">
+                  <div className="admin-form-group">
+                    <label className="admin-form-label" htmlFor="doc-defaultSource">
+                      Default Source <span className="required">*</span>
+                    </label>
+                    <select
+                      id="doc-defaultSource"
+                      className="admin-select"
+                      value={formData.defaultSource}
+                      onChange={(e) => setFormData({ ...formData, defaultSource: e.target.value })}
+                      disabled={formSubmitting}
+                    >
+                      <option value="local">Local (Algeria office)</option>
+                      <option value="china">China (Supplier / Partner)</option>
+                    </select>
+                  </div>
+
+                  <div className="admin-form-group">
+                    <label className="admin-form-label" htmlFor="doc-originLanguage">
+                      Origin Language
+                    </label>
+                    <input
+                      id="doc-originLanguage"
+                      type="text"
+                      className="admin-input"
+                      placeholder="e.g. Chinese, French"
+                      value={formData.originLanguage}
+                      onChange={(e) => setFormData({ ...formData, originLanguage: e.target.value })}
+                      disabled={formSubmitting}
+                    />
+                  </div>
+                </div>
+
+                <div className="admin-form-grid">
+                  <div className="admin-form-group">
+                    <label className="admin-form-label" htmlFor="doc-turnaround">
+                      Est. Turnaround (Days)
+                    </label>
+                    <input
+                      id="doc-turnaround"
+                      type="number"
+                      min="0"
+                      className="admin-input"
+                      placeholder="e.g. 5"
+                      value={formData.estimatedTurnaroundDays}
+                      onChange={(e) => setFormData({ ...formData, estimatedTurnaroundDays: e.target.value })}
+                      disabled={formSubmitting}
+                    />
+                  </div>
+
+                  <div className="admin-form-group">
+                    <label className="admin-form-label" htmlFor="doc-sortOrder">
+                      Sort Order
+                    </label>
+                    <input
+                      id="doc-sortOrder"
+                      type="number"
+                      className="admin-input"
+                      value={formData.sortOrder}
+                      onChange={(e) => setFormData({ ...formData, sortOrder: e.target.value })}
+                      disabled={formSubmitting}
+                    />
+                  </div>
+                </div>
+
+                <div className="admin-form-group">
+                  <label className="admin-form-label" htmlFor="doc-description">
+                    Description / Internal Notes
+                  </label>
+                  <textarea
+                    id="doc-description"
+                    className="admin-textarea"
+                    placeholder="Internal guidance or customs filing notes…"
+                    value={formData.description}
+                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                    disabled={formSubmitting}
+                  />
+                </div>
+
+                <label className="admin-checkbox-label">
+                  <input
+                    type="checkbox"
+                    checked={formData.active}
+                    onChange={(e) => setFormData({ ...formData, active: e.target.checked })}
+                    disabled={formSubmitting}
+                  />
+                  <span>Active in Catalog</span>
+                </label>
+
+                {/* Pricing Section */}
+                <div style={{
+                  padding: 16,
+                  background: 'var(--admin-surface-subtle)',
+                  borderRadius: 'var(--admin-radius)',
+                  border: '1px solid var(--admin-border)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 16,
+                }}>
                   <div>
-                    <div style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--ink)', marginBottom: 8 }}>
-                      {STRINGS.docTypes.pricingOriginalOnly} <span className="required">*</span>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--admin-text-primary)', marginBottom: 8 }}>
+                      Standard Pricing (Original Only) <span className="required">*</span>
                     </div>
-                    <div className="form-grid">
-                      <div className="form-group">
-                        <label className="form-label" htmlFor="price-orig-client">
-                          {STRINGS.docTypes.clientPrice} <span className="required">*</span>
+                    <div className="admin-form-grid">
+                      <div className="admin-form-group">
+                        <label className="admin-form-label" htmlFor="price-orig-client">
+                          Client Price (DZD) <span className="required">*</span>
                         </label>
                         <input
                           id="price-orig-client"
                           type="number"
                           min="0"
                           step="1"
-                          className="form-input"
+                          className="admin-input"
                           placeholder="e.g. 15000"
                           value={formData.pricing.originalOnly.clientPrice}
                           onChange={(e) =>
@@ -718,16 +748,16 @@ export default function DocumentTypesPage() {
                           disabled={formSubmitting}
                         />
                       </div>
-                      <div className="form-group">
-                        <label className="form-label" htmlFor="price-orig-cost">
-                          {STRINGS.docTypes.costPrice} <span className="required">*</span>
+                      <div className="admin-form-group">
+                        <label className="admin-form-label" htmlFor="price-orig-cost">
+                          Cost Price (DZD) <span className="required">*</span>
                         </label>
                         <input
                           id="price-orig-cost"
                           type="number"
                           min="0"
                           step="1"
-                          className="form-input"
+                          className="admin-input"
                           placeholder="e.g. 5000"
                           value={formData.pricing.originalOnly.costPrice}
                           onChange={(e) =>
@@ -746,52 +776,47 @@ export default function DocumentTypesPage() {
                     </div>
                   </div>
 
-                  {/* Translation Toggle */}
-                  <div style={{ marginTop: 8 }}>
-                    <label className="form-checkbox-row">
+                  <div>
+                    <label className="admin-checkbox-label">
                       <input
                         type="checkbox"
                         checked={formData.hasTranslation}
                         onChange={(e) => setFormData({ ...formData, hasTranslation: e.target.checked })}
                         disabled={formSubmitting}
                       />
-                      <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>
-                        {STRINGS.docTypes.hasTranslation}
-                      </span>
+                      <span>Offers / Requires Chinese Translation</span>
                     </label>
-                    <span className="form-hint" style={{ display: 'block', marginInlineStart: 24, marginTop: 2 }}>
-                      {STRINGS.docTypes.hasTranslationHint}
+                    <span className="admin-form-hint" style={{ display: 'block', marginInlineStart: 24, marginTop: 2 }}>
+                      When checked, translation-specific pricing tiers become required.
                     </span>
                   </div>
 
-                  {/* Conditional Translation Pricing: ONLY visible when hasTranslation is true */}
+                  {/* Conditional Translation Pricing */}
                   {formData.hasTranslation && (
                     <div style={{
-                      padding: 'var(--space-md)',
-                      background: 'var(--page-2)',
-                      borderRadius: 'var(--radius-console)',
-                      border: '1px dashed var(--line)',
+                      padding: 14,
+                      background: 'var(--admin-surface)',
+                      borderRadius: 'var(--admin-radius)',
+                      border: '1px solid var(--admin-border)',
                       display: 'flex',
                       flexDirection: 'column',
-                      gap: 'var(--space-md)',
-                      marginTop: 4,
+                      gap: 14,
                     }}>
-                      {/* Original + Translation */}
                       <div>
-                        <div style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--ink)', marginBottom: 6 }}>
-                          {STRINGS.docTypes.pricingWithTranslation} <span className="required">*</span>
+                        <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--admin-text-primary)', marginBottom: 6 }}>
+                          Original + Translation Pricing <span className="required">*</span>
                         </div>
-                        <div className="form-grid">
-                          <div className="form-group">
-                            <label className="form-label" htmlFor="price-opt-client">
-                              {STRINGS.docTypes.clientPrice} <span className="required">*</span>
+                        <div className="admin-form-grid">
+                          <div className="admin-form-group">
+                            <label className="admin-form-label" htmlFor="price-opt-client">
+                              Client Price (DZD) <span className="required">*</span>
                             </label>
                             <input
                               id="price-opt-client"
                               type="number"
                               min="0"
                               step="1"
-                              className="form-input"
+                              className="admin-input"
                               placeholder="e.g. 25000"
                               value={formData.pricing.originalPlusTranslation.clientPrice}
                               onChange={(e) =>
@@ -810,16 +835,16 @@ export default function DocumentTypesPage() {
                               disabled={formSubmitting}
                             />
                           </div>
-                          <div className="form-group">
-                            <label className="form-label" htmlFor="price-opt-cost">
-                              {STRINGS.docTypes.costPrice} <span className="required">*</span>
+                          <div className="admin-form-group">
+                            <label className="admin-form-label" htmlFor="price-opt-cost">
+                              Cost Price (DZD) <span className="required">*</span>
                             </label>
                             <input
                               id="price-opt-cost"
                               type="number"
                               min="0"
                               step="1"
-                              className="form-input"
+                              className="admin-input"
                               placeholder="e.g. 10000"
                               value={formData.pricing.originalPlusTranslation.costPrice}
                               onChange={(e) =>
@@ -841,22 +866,21 @@ export default function DocumentTypesPage() {
                         </div>
                       </div>
 
-                      {/* Translation Only */}
                       <div>
-                        <div style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--ink)', marginBottom: 6 }}>
-                          {STRINGS.docTypes.pricingTranslationOnly} <span className="required">*</span>
+                        <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--admin-text-primary)', marginBottom: 6 }}>
+                          Translation Only Pricing <span className="required">*</span>
                         </div>
-                        <div className="form-grid">
-                          <div className="form-group">
-                            <label className="form-label" htmlFor="price-to-client">
-                              {STRINGS.docTypes.clientPrice} <span className="required">*</span>
+                        <div className="admin-form-grid">
+                          <div className="admin-form-group">
+                            <label className="admin-form-label" htmlFor="price-to-client">
+                              Client Price (DZD) <span className="required">*</span>
                             </label>
                             <input
                               id="price-to-client"
                               type="number"
                               min="0"
                               step="1"
-                              className="form-input"
+                              className="admin-input"
                               placeholder="e.g. 12000"
                               value={formData.pricing.translationOnly.clientPrice}
                               onChange={(e) =>
@@ -875,16 +899,16 @@ export default function DocumentTypesPage() {
                               disabled={formSubmitting}
                             />
                           </div>
-                          <div className="form-group">
-                            <label className="form-label" htmlFor="price-to-cost">
-                              {STRINGS.docTypes.costPrice} <span className="required">*</span>
+                          <div className="admin-form-group">
+                            <label className="admin-form-label" htmlFor="price-to-cost">
+                              Cost Price (DZD) <span className="required">*</span>
                             </label>
                             <input
                               id="price-to-cost"
                               type="number"
                               min="0"
                               step="1"
-                              className="form-input"
+                              className="admin-input"
                               placeholder="e.g. 5000"
                               value={formData.pricing.translationOnly.costPrice}
                               onChange={(e) =>
@@ -909,90 +933,110 @@ export default function DocumentTypesPage() {
                   )}
                 </div>
 
-                {/* Example Image Section */}
-                <div className="form-section">
-                  <div className="form-section-title">{STRINGS.docTypes.imageSection}</div>
-
-                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: 'var(--space-md)' }}>
-                    {/* Preview box */}
-                    {(imagePreviewUrl || existingImageUrl) ? (
-                      <div className="img-preview-wrap">
-                        <img
-                          src={imagePreviewUrl || existingImageUrl}
-                          alt="Document preview"
-                        />
-                      </div>
-                    ) : (
-                      <div style={{
-                        width: 140,
-                        height: 90,
-                        border: '2px dashed var(--line)',
-                        borderRadius: 'var(--radius-console)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        fontSize: '0.72rem',
-                        color: 'var(--ink-2)',
-                        textAlign: 'center',
-                        padding: 8,
-                      }}>
-                        {STRINGS.docTypes.noImageYet}
-                      </div>
-                    )}
-
-                    {/* File picker */}
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flex: 1 }}>
-                      <input
-                        ref={fileInputRef}
-                        type="file"
-                        accept="image/png, image/jpeg, image/webp"
-                        style={{ display: 'none' }}
-                        onChange={handleFileChange}
-                        disabled={formSubmitting}
+                {/* Example Image Upload */}
+                <div style={{
+                  padding: 16,
+                  border: '1px solid var(--admin-border)',
+                  borderRadius: 'var(--admin-radius)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 16,
+                }}>
+                  {(imagePreviewUrl || existingImageUrl) ? (
+                    <div style={{
+                      width: 90,
+                      height: 70,
+                      border: '1px solid var(--admin-border)',
+                      borderRadius: 'var(--admin-radius-sm)',
+                      overflow: 'hidden',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      background: 'var(--admin-surface-subtle)',
+                      flexShrink: 0,
+                    }}>
+                      <img
+                        src={imagePreviewUrl || existingImageUrl}
+                        alt="Document preview"
+                        style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
                       />
+                    </div>
+                  ) : (
+                    <div style={{
+                      width: 90,
+                      height: 70,
+                      border: '1px dashed var(--admin-border-input)',
+                      borderRadius: 'var(--admin-radius-sm)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 4,
+                      color: 'var(--admin-text-muted)',
+                      flexShrink: 0,
+                      background: 'var(--admin-surface-subtle)',
+                    }}>
+                      <ImageIcon size={20} />
+                      <span style={{ fontSize: 10 }}>No image</span>
+                    </div>
+                  )}
+
+                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--admin-text-primary)' }}>
+                      Example Document Image
+                    </div>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/png, image/jpeg, image/webp"
+                      style={{ display: 'none' }}
+                      onChange={handleFileChange}
+                      disabled={formSubmitting}
+                    />
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                       <button
                         type="button"
-                        className="btn btn-secondary btn-sm"
+                        className="btn-admin-secondary"
+                        style={{ height: 32, padding: '0 12px', fontSize: 12.5 }}
                         onClick={() => fileInputRef.current?.click()}
                         disabled={formSubmitting}
                       >
-                        {(imagePreviewUrl || existingImageUrl) ? STRINGS.docTypes.replaceImage : STRINGS.docTypes.uploadImage}
+                        <UploadCloud size={14} />
+                        <span>{(imagePreviewUrl || existingImageUrl) ? 'Replace Image' : 'Upload Image'}</span>
                       </button>
-                      <span className="form-hint">
-                        PNG, JPG, or WEBP up to 12MB. Stored directly in system database.
-                      </span>
                       {selectedFile && (
-                        <span style={{ fontSize: '0.75rem', color: 'var(--ok)', fontWeight: 600 }}>
-                          Selected: {selectedFile.name} ({(selectedFile.size / 1024).toFixed(0)} KB)
+                        <span style={{ fontSize: 12, color: 'var(--status-active-text)', fontWeight: 500 }}>
+                          {selectedFile.name} ({(selectedFile.size / 1024).toFixed(0)} KB)
                         </span>
                       )}
                     </div>
+                    <span className="admin-form-hint">PNG, JPG, or WEBP up to 12MB.</span>
                   </div>
                 </div>
               </div>
 
               {/* Modal Footer */}
-              <div className="modal-footer">
+              <div className="admin-modal-footer">
                 <button
                   type="button"
-                  className="btn btn-secondary"
+                  className="btn-admin-secondary"
                   onClick={closeModal}
                   disabled={formSubmitting}
                 >
-                  {STRINGS.common.cancel}
+                  Cancel
                 </button>
                 <button
                   type="submit"
-                  className="btn btn-primary"
+                  className="btn-admin-primary"
                   disabled={formSubmitting}
                 >
                   {formSubmitting ? (
                     <>
-                      <span className="spinner" />
-                      <span>{editingItem ? STRINGS.common.saving : STRINGS.common.creating}</span>
+                      <span className="admin-spinner" />
+                      <span>{editingItem ? 'Saving…' : 'Creating…'}</span>
                     </>
                   ) : (
-                    <span>{editingItem ? STRINGS.common.save : STRINGS.common.create}</span>
+                    <span>{editingItem ? 'Save Changes' : 'Create Document Type'}</span>
                   )}
                 </button>
               </div>

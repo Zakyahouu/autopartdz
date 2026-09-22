@@ -1,17 +1,23 @@
-import { NavLink, Outlet, Navigate } from 'react-router-dom';
+import { Outlet, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import Sidebar from './Sidebar';
+import { LogOut, User } from 'lucide-react';
 
 export default function AdminShell() {
-  const { user, loading } = useAuth();
+  const { user, loading, logout } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
 
   if (loading) {
     return (
       <div style={{
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        height: '100vh', background: 'var(--page)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        height: '100vh',
+        backgroundColor: 'var(--admin-bg)',
       }}>
-        <span className="spinner" style={{ width: 24, height: 24, borderWidth: 3 }} />
+        <span className="admin-spinner" style={{ width: 28, height: 28, borderWidth: 3 }} />
       </div>
     );
   }
@@ -20,12 +26,57 @@ export default function AdminShell() {
     return <Navigate to="/login" replace />;
   }
 
+  const handleLogout = () => {
+    logout();
+    navigate('/login');
+  };
+
+  // Determine breadcrumb current title
+  let sectionTitle = 'Catalog';
+  if (location.pathname.includes('document-types')) {
+    sectionTitle = 'Document Types';
+  } else if (location.pathname.includes('car-categories')) {
+    sectionTitle = 'Car Categories';
+  }
+
   return (
-    <div className="console-layout">
+    <div className="admin-layout">
+      {/* Fixed Left Sidebar */}
       <Sidebar />
-      <main className="console-main">
-        <Outlet />
-      </main>
+
+      {/* Main Workspace */}
+      <div className="admin-workspace">
+        {/* Top Bar */}
+        <header className="admin-topbar">
+          <div className="admin-topbar-breadcrumb">
+            <span>Admin</span>
+            <span>/</span>
+            <span className="current">{sectionTitle}</span>
+          </div>
+
+          <div className="admin-topbar-user">
+            <div className="admin-user-info">
+              <span className="admin-user-name">{user?.name || 'Administrator'}</span>
+              <span className="admin-user-role">{user?.role?.replace('_', ' ')}</span>
+            </div>
+
+            <button
+              type="button"
+              className="admin-logout-btn"
+              onClick={handleLogout}
+              title="Sign out of admin console"
+            >
+              <LogOut size={14} />
+              <span>Sign out</span>
+            </button>
+          </div>
+        </header>
+
+        {/* Content Viewport */}
+        <main className="admin-content">
+          <Outlet />
+        </main>
+      </div>
     </div>
   );
 }

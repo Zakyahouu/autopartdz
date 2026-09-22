@@ -1,6 +1,18 @@
 import { useState, useEffect, useMemo } from 'react';
 import { apiFetch } from '../utils/api';
-import { STRINGS } from '../constants/strings';
+import {
+  Plus,
+  Search,
+  Pencil,
+  Power,
+  PowerOff,
+  CheckCircle2,
+  CircleDot,
+  X,
+  AlertCircle,
+  Layers,
+  FileText,
+} from 'lucide-react';
 
 const EMPTY_FORM = {
   name: '',
@@ -22,7 +34,6 @@ export default function CarCategoriesPage() {
   const [formSubmitting, setFormSubmitting] = useState(false);
   const [actionLoadingId, setActionLoadingId] = useState(null);
 
-  // Load categories and all document types
   const loadData = async () => {
     setLoading(true);
     const [catRes, docRes] = await Promise.all([
@@ -43,7 +54,6 @@ export default function CarCategoriesPage() {
     loadData();
   }, []);
 
-  // Filtered and searched categories
   const filteredCategories = useMemo(() => {
     return categories.filter((cat) => {
       if (filterStatus === 'active' && !cat.active) return false;
@@ -58,8 +68,6 @@ export default function CarCategoriesPage() {
     });
   }, [categories, filterStatus, search]);
 
-  // Document types available for the checklist:
-  // Active document types, plus any document type already attached to the currently edited category
   const availableDocTypes = useMemo(() => {
     if (!editingCategory) {
       return docTypes.filter((d) => d.active);
@@ -78,7 +86,6 @@ export default function CarCategoriesPage() {
   };
 
   const openEditModal = async (cat) => {
-    // Fetch single category to ensure populated requiredDocumentTypes
     const { ok, data } = await apiFetch(`/car-categories/${cat._id}`);
     const target = ok ? data : cat;
 
@@ -103,7 +110,6 @@ export default function CarCategoriesPage() {
     setEditingCategory(null);
   };
 
-  // Toggle active status via PATCH (soft delete / reactivate)
   const handleToggleActive = async (cat) => {
     setActionLoadingId(cat._id);
     const newActive = !cat.active;
@@ -178,48 +184,43 @@ export default function CarCategoriesPage() {
   return (
     <div>
       {/* Page Header */}
-      <div className="console-page-header">
+      <div className="admin-page-header">
         <div>
-          <h1 className="console-page-title">{STRINGS.carCategories.title}</h1>
-          <p className="console-page-subtitle">{STRINGS.carCategories.subtitle}</p>
+          <h1 className="admin-page-title">Car Categories</h1>
+          <p className="admin-page-subtitle">
+            Classifications and required customs documentation profiles for vehicle imports.
+          </p>
         </div>
-        <button className="btn btn-primary" onClick={openCreateModal}>
-          {STRINGS.carCategories.createNew}
+        <button
+          type="button"
+          className="btn-admin-primary"
+          onClick={openCreateModal}
+        >
+          <Plus size={16} />
+          <span>New Car Category</span>
         </button>
       </div>
 
-      {/* Filter and Search Bar */}
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        gap: 'var(--space-md)',
-        marginBottom: 'var(--space-lg)',
-        flexWrap: 'wrap',
-      }}>
-        {/* Status Filter Tabs */}
-        <div style={{ display: 'flex', gap: 'var(--space-xs)', alignItems: 'center' }}>
-          <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--ink-2)', textTransform: 'uppercase' }}>
-            {STRINGS.common.filterByStatus}
-          </span>
+      {/* Toolbar: Filters and Search */}
+      <div className="admin-toolbar">
+        <div className="admin-filter-tabs">
           {['all', 'active', 'inactive'].map((status) => (
             <button
               key={status}
-              className={`btn btn-sm ${filterStatus === status ? 'btn-primary' : 'btn-secondary'}`}
+              type="button"
+              className={`admin-filter-tab ${filterStatus === status ? 'active' : ''}`}
               onClick={() => setFilterStatus(status)}
-              style={{ textTransform: 'capitalize' }}
             >
               {status}
             </button>
           ))}
         </div>
 
-        {/* Search */}
-        <div style={{ minWidth: 260 }}>
+        <div className="admin-search-wrapper">
+          <Search size={15} className="admin-search-icon" />
           <input
             type="search"
-            className="form-input"
-            style={{ minHeight: 34, fontSize: '0.8rem' }}
+            className="admin-search-input"
             placeholder="Search category name or notes…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
@@ -227,32 +228,32 @@ export default function CarCategoriesPage() {
         </div>
       </div>
 
-      {/* Table view */}
-      <div className="console-table-wrap">
-        <table className="console-table">
+      {/* Data Table */}
+      <div className="admin-card">
+        <table className="admin-table">
           <thead>
             <tr>
-              <th>{STRINGS.carCategories.name}</th>
-              <th>{STRINGS.carCategories.description}</th>
-              <th style={{ width: 140, textAlign: 'center' }}>{STRINGS.carCategories.docCount}</th>
-              <th style={{ width: 100, textAlign: 'center' }}>{STRINGS.common.status}</th>
-              <th style={{ width: 90, textAlign: 'right' }}>{STRINGS.common.actions}</th>
+              <th>Category Name</th>
+              <th>Description / Scope</th>
+              <th className="align-center" style={{ width: 140 }}>Required Docs</th>
+              <th className="align-center" style={{ width: 110 }}>Status</th>
+              <th className="align-right" style={{ width: 90 }}>Actions</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan="5" className="console-table-empty">
+                <td colSpan="5" className="admin-table-empty">
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-                    <span className="spinner" />
-                    <span>{STRINGS.common.loading}</span>
+                    <span className="admin-spinner" />
+                    <span>Loading categories…</span>
                   </div>
                 </td>
               </tr>
             ) : filteredCategories.length === 0 ? (
               <tr>
-                <td colSpan="5" className="console-table-empty">
-                  {STRINGS.common.noRecords}
+                <td colSpan="5" className="admin-table-empty">
+                  No car categories found.
                 </td>
               </tr>
             ) : (
@@ -264,37 +265,58 @@ export default function CarCategoriesPage() {
                 return (
                   <tr key={cat._id} style={{ opacity: cat.active ? 1 : 0.65 }}>
                     <td>
-                      <div style={{ fontWeight: 600 }}>{cat.name}</div>
+                      <div style={{ fontWeight: 600, color: 'var(--admin-text-primary)' }}>
+                        {cat.name}
+                      </div>
                     </td>
-                    <td style={{ color: 'var(--ink-2)', fontSize: '0.85rem' }}>
-                      {cat.description || <span style={{ opacity: 0.6 }}>—</span>}
+                    <td style={{ color: 'var(--admin-text-secondary)', fontSize: 13 }}>
+                      {cat.description || <span style={{ color: 'var(--admin-text-muted)' }}>—</span>}
                     </td>
-                    <td style={{ textAlign: 'center' }}>
-                      <span className="badge badge-progress">
-                        {count} {count === 1 ? 'doc' : 'docs'}
+                    <td className="align-center">
+                      <span className="admin-status" style={{ fontWeight: 500 }}>
+                        <FileText size={12} />
+                        <span>{count} {count === 1 ? 'doc' : 'docs'}</span>
                       </span>
                     </td>
-                    <td style={{ textAlign: 'center' }}>
-                      <button
-                        className={`toggle-btn ${cat.active ? 'is-active' : 'is-inactive'}`}
-                        onClick={() => handleToggleActive(cat)}
-                        disabled={actionLoadingId === cat._id}
-                        title="Click to toggle status"
-                      >
-                        {actionLoadingId === cat._id ? (
-                          <span className="spinner" />
+                    <td className="align-center">
+                      <span className={`admin-status ${cat.active ? 'is-active' : 'is-inactive'}`}>
+                        {cat.active ? (
+                          <CheckCircle2 size={12} strokeWidth={2.2} />
                         ) : (
-                          <span>{cat.active ? 'Active' : 'Inactive'}</span>
+                          <CircleDot size={12} strokeWidth={2.2} />
                         )}
-                      </button>
+                        <span>{cat.active ? 'Active' : 'Inactive'}</span>
+                      </span>
                     </td>
-                    <td style={{ textAlign: 'right' }}>
-                      <button
-                        className="btn btn-secondary btn-sm"
-                        onClick={() => openEditModal(cat)}
-                      >
-                        {STRINGS.common.edit}
-                      </button>
+                    <td className="align-right">
+                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                        <button
+                          type="button"
+                          className="btn-admin-icon"
+                          aria-label={`Edit ${cat.name}`}
+                          title="Edit category"
+                          onClick={() => openEditModal(cat)}
+                        >
+                          <Pencil size={14} />
+                        </button>
+
+                        <button
+                          type="button"
+                          className={`btn-admin-icon ${cat.active ? 'danger' : ''}`}
+                          aria-label={cat.active ? 'Deactivate category' : 'Activate category'}
+                          title={cat.active ? 'Deactivate' : 'Activate'}
+                          onClick={() => handleToggleActive(cat)}
+                          disabled={actionLoadingId === cat._id}
+                        >
+                          {actionLoadingId === cat._id ? (
+                            <span className="admin-spinner" style={{ width: 12, height: 12 }} />
+                          ) : cat.active ? (
+                            <PowerOff size={14} />
+                          ) : (
+                            <Power size={14} />
+                          )}
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 );
@@ -304,41 +326,46 @@ export default function CarCategoriesPage() {
         </table>
       </div>
 
-      {/* Create / Edit Modal */}
+      {/* Create / Edit Modal Dialog */}
       {modalOpen && (
-        <div className="modal-backdrop" onClick={(e) => { if (e.target === e.currentTarget) closeModal(); }}>
-          <div className="modal-panel" role="dialog" aria-modal="true" aria-labelledby="cat-modal-title">
-            <div className="modal-header">
-              <h2 id="cat-modal-title" className="modal-title">
-                {editingCategory ? STRINGS.carCategories.editTitle : STRINGS.carCategories.createTitle}
+        <div
+          className="admin-modal-backdrop"
+          onClick={(e) => { if (e.target === e.currentTarget) closeModal(); }}
+        >
+          <div className="admin-modal-panel" role="dialog" aria-modal="true" aria-labelledby="cat-modal-title">
+            <div className="admin-modal-header">
+              <h2 id="cat-modal-title" className="admin-modal-title">
+                {editingCategory ? 'Edit Car Category' : 'Create Car Category'}
               </h2>
               <button
-                className="modal-close"
+                type="button"
+                className="btn-admin-icon"
                 onClick={closeModal}
                 disabled={formSubmitting}
-                aria-label="Close"
+                aria-label="Close modal"
               >
-                ✕
+                <X size={16} />
               </button>
             </div>
 
             <form onSubmit={handleSubmit}>
-              <div className="modal-body">
+              <div className="admin-modal-body">
                 {formError && (
-                  <div className="console-alert console-alert-error" role="alert">
-                    {formError}
+                  <div className="admin-alert admin-alert-error" role="alert">
+                    <AlertCircle size={15} style={{ flexShrink: 0 }} />
+                    <span>{formError}</span>
                   </div>
                 )}
 
-                <div className="form-group">
-                  <label className="form-label" htmlFor="cat-name">
-                    {STRINGS.carCategories.name} <span className="required">*</span>
+                <div className="admin-form-group">
+                  <label className="admin-form-label" htmlFor="cat-name">
+                    Category Name <span className="required">*</span>
                   </label>
                   <input
                     id="cat-name"
                     type="text"
-                    className="form-input"
-                    placeholder={STRINGS.carCategories.namePlaceholder}
+                    className="admin-input"
+                    placeholder="e.g. Passenger Vehicles (M1), Commercial"
                     value={formData.name}
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                     required
@@ -346,66 +373,101 @@ export default function CarCategoriesPage() {
                   />
                 </div>
 
-                <div className="form-group">
-                  <label className="form-label" htmlFor="cat-description">
-                    {STRINGS.carCategories.description}
+                <div className="admin-form-group">
+                  <label className="admin-form-label" htmlFor="cat-description">
+                    Description / Scope
                   </label>
                   <textarea
                     id="cat-description"
-                    className="form-textarea"
-                    placeholder={STRINGS.carCategories.descriptionPlaceholder}
+                    className="admin-textarea"
+                    placeholder="Customs classification notes, engine capacity specifications…"
                     value={formData.description}
                     onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                     disabled={formSubmitting}
                   />
                 </div>
 
-                <label className="form-checkbox-row">
+                <label className="admin-checkbox-label">
                   <input
                     type="checkbox"
                     checked={formData.active}
                     onChange={(e) => setFormData({ ...formData, active: e.target.checked })}
                     disabled={formSubmitting}
                   />
-                  <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>Active (Category visibility)</span>
+                  <span>Active in Catalog</span>
                 </label>
 
                 {/* Required Documents Checklist */}
-                <div className="form-section">
-                  <div className="form-section-title">
-                    {STRINGS.carCategories.requiredDocs} ({formData.requiredDocumentTypes.length} selected)
+                <div>
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    marginBottom: 6,
+                  }}>
+                    <label className="admin-form-label" style={{ marginBottom: 0 }}>
+                      Required Documents
+                    </label>
+                    <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--admin-text-secondary)' }}>
+                      {formData.requiredDocumentTypes.length} selected
+                    </span>
                   </div>
-                  <span className="form-hint" style={{ marginTop: -8 }}>
-                    {STRINGS.carCategories.requiredDocsHint}
+                  <span className="admin-form-hint" style={{ display: 'block', marginBottom: 10 }}>
+                    Select all official documents required when clearing this category through Algerian customs.
                   </span>
 
-                  <div className="checklist">
+                  <div style={{
+                    border: '1px solid var(--admin-border)',
+                    borderRadius: 'var(--admin-radius)',
+                    maxHeight: 260,
+                    overflowY: 'auto',
+                    background: 'var(--admin-surface)',
+                  }}>
                     {availableDocTypes.length === 0 ? (
-                      <div style={{ padding: 'var(--space-md)', color: 'var(--ink-2)', fontSize: '0.85rem' }}>
-                        {STRINGS.carCategories.noDocsAvailable}
+                      <div style={{ padding: 16, color: 'var(--admin-text-muted)', fontSize: 13, textAlign: 'center' }}>
+                        No active document types available to select.
                       </div>
                     ) : (
                       availableDocTypes.map((doc) => {
                         const isChecked = formData.requiredDocumentTypes.includes(doc._id);
                         return (
-                          <label key={doc._id} className="checklist-item">
+                          <label
+                            key={doc._id}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 12,
+                              padding: '10px 14px',
+                              borderBottom: '1px solid var(--admin-border-subtle)',
+                              cursor: 'pointer',
+                              background: isChecked ? 'var(--admin-surface-subtle)' : 'transparent',
+                              transition: 'background-color 0.12s ease',
+                            }}
+                          >
                             <input
                               type="checkbox"
                               checked={isChecked}
                               onChange={() => handleDocTypeToggle(doc._id)}
                               disabled={formSubmitting}
+                              style={{ accentColor: 'var(--admin-accent)', width: 16, height: 16 }}
                             />
-                            <div className="checklist-item-name">
-                              <span>{doc.shortName}</span>
+                            <div style={{ flex: 1 }}>
+                              <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--admin-text-primary)' }}>
+                                {doc.shortName}
+                              </span>
                               {!doc.active && (
-                                <span style={{ color: 'var(--stamp)', fontSize: '0.72rem', marginInlineStart: 6 }}>
-                                  (inactive in catalog)
+                                <span style={{ color: 'var(--admin-accent)', fontSize: 11, marginInlineStart: 6 }}>
+                                  (inactive)
                                 </span>
                               )}
                             </div>
-                            <div className="checklist-item-code">
+                            <span style={{
+                              fontFamily: 'var(--admin-font-mono)',
+                              fontSize: 11.5,
+                              color: 'var(--admin-text-muted)',
+                            }}>
                               {doc.code || '—'}
-                            </div>
+                            </span>
                           </label>
                         );
                       })
@@ -415,27 +477,27 @@ export default function CarCategoriesPage() {
               </div>
 
               {/* Modal Footer */}
-              <div className="modal-footer">
+              <div className="admin-modal-footer">
                 <button
                   type="button"
-                  className="btn btn-secondary"
+                  className="btn-admin-secondary"
                   onClick={closeModal}
                   disabled={formSubmitting}
                 >
-                  {STRINGS.common.cancel}
+                  Cancel
                 </button>
                 <button
                   type="submit"
-                  className="btn btn-primary"
+                  className="btn-admin-primary"
                   disabled={formSubmitting}
                 >
                   {formSubmitting ? (
                     <>
-                      <span className="spinner" />
-                      <span>{editingCategory ? STRINGS.common.saving : STRINGS.common.creating}</span>
+                      <span className="admin-spinner" />
+                      <span>{editingCategory ? 'Saving…' : 'Creating…'}</span>
                     </>
                   ) : (
-                    <span>{editingCategory ? STRINGS.common.save : STRINGS.common.create}</span>
+                    <span>{editingCategory ? 'Save Changes' : 'Create Car Category'}</span>
                   )}
                 </button>
               </div>

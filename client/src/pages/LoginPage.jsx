@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { ShieldCheck, ArrowRight, AlertCircle, Lock } from 'lucide-react';
 
 export default function LoginPage() {
   const { login, user } = useAuth();
@@ -26,84 +27,89 @@ export default function LoginPage() {
       setError(result.error);
       return;
     }
-    // AuthContext will update user → redirect fires via useEffect
   };
 
   return (
     <div style={{
       minHeight: '100vh',
-      background: 'var(--page)',
+      backgroundColor: 'var(--admin-bg)',
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
       padding: 24,
     }}>
       <div style={{
-        width: 'min(420px, 100%)',
-        background: 'var(--card)',
-        border: '2px solid var(--ink)',
-        borderRadius: 'var(--radius-console)',
-        boxShadow: 'var(--shadow-paper)',
-        overflow: 'hidden',
+        width: 'min(400px, 100%)',
+        backgroundColor: 'var(--admin-surface)',
+        border: '1px solid var(--admin-border)',
+        borderRadius: 'var(--admin-radius)',
+        boxShadow: 'var(--admin-shadow-sm)',
+        padding: 32,
       }}>
-        {/* Header */}
-        <div style={{
-          padding: '20px 28px',
-          borderBottom: '2px solid var(--ink)',
-          background: 'var(--page-2)',
-        }}>
-          <div style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--ink)' }}>
-            auto<span style={{ color: 'var(--stamp)' }}>part</span>dz
+        {/* Brand Header */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 24 }}>
+          <div className="admin-brand-icon" style={{ width: 32, height: 32 }}>
+            <ShieldCheck size={18} strokeWidth={2.5} />
           </div>
-          <div style={{ fontSize: '0.72rem', color: 'var(--ink-2)', marginTop: 2, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-            Admin Console
+          <div>
+            <div className="admin-brand-title" style={{ fontSize: 16 }}>
+              autopart<span>dz</span>
+            </div>
+            <div style={{ fontSize: 11.5, color: 'var(--admin-text-muted)' }}>
+              Document Management Console
+            </div>
           </div>
         </div>
 
-        {/* Form */}
-        <form onSubmit={handleSubmit} style={{ padding: 28, display: 'flex', flexDirection: 'column', gap: 16 }}>
-          <div>
-            <h1 style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--ink)', marginBottom: 4 }}>
-              Sign in
-            </h1>
-            <p style={{ fontSize: '0.8rem', color: 'var(--ink-2)' }}>
-              Admin access only. Your session is verified on every request.
-            </p>
+        {/* Title */}
+        <div style={{ marginBottom: 20 }}>
+          <h1 style={{ fontSize: 18, fontWeight: 700, color: 'var(--admin-text-primary)' }}>
+            Admin Sign In
+          </h1>
+          <p style={{ fontSize: 13, color: 'var(--admin-text-secondary)', marginTop: 4 }}>
+            Enter your credentials to access the admin catalog.
+          </p>
+        </div>
+
+        {/* Error Alert */}
+        {error && (
+          <div className="admin-alert admin-alert-error" role="alert" style={{ marginBottom: 16 }}>
+            <AlertCircle size={15} style={{ flexShrink: 0 }} />
+            <span>{error}</span>
           </div>
+        )}
 
-          {error && (
-            <div className="console-alert console-alert-error" role="alert">
-              {error}
-            </div>
-          )}
-
-          <div className="form-group">
-            <label htmlFor="login-email" className="form-label">
-              Email <span className="required">*</span>
+        {/* Form */}
+        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div className="admin-form-group">
+            <label htmlFor="login-email" className="admin-form-label">
+              Email Address <span className="required">*</span>
             </label>
             <input
               id="login-email"
               type="email"
-              className="form-input"
+              className="admin-input"
               autoComplete="email"
+              placeholder="admin@autopartdz.dz"
               value={email}
-              onChange={e => setEmail(e.target.value)}
+              onChange={(e) => setEmail(e.target.value)}
               required
               disabled={busy}
             />
           </div>
 
-          <div className="form-group">
-            <label htmlFor="login-password" className="form-label">
+          <div className="admin-form-group">
+            <label htmlFor="login-password" className="admin-form-label">
               Password <span className="required">*</span>
             </label>
             <input
               id="login-password"
               type="password"
-              className="form-input"
+              className="admin-input"
               autoComplete="current-password"
+              placeholder="••••••••"
               value={password}
-              onChange={e => setPassword(e.target.value)}
+              onChange={(e) => setPassword(e.target.value)}
               required
               disabled={busy}
             />
@@ -111,11 +117,27 @@ export default function LoginPage() {
 
           <button
             type="submit"
-            className="btn btn-primary"
-            style={{ marginTop: 4, minHeight: 44 }}
+            className="btn-admin-primary"
+            style={{
+              marginTop: 6,
+              height: 40,
+              justifyContent: 'center',
+              width: '100%',
+              fontSize: 14,
+            }}
             disabled={busy}
           >
-            {busy ? <><span className="spinner" />Signing in…</> : 'Sign in'}
+            {busy ? (
+              <>
+                <span className="admin-spinner" />
+                <span>Signing in…</span>
+              </>
+            ) : (
+              <>
+                <span>Sign in</span>
+                <ArrowRight size={15} />
+              </>
+            )}
           </button>
         </form>
       </div>

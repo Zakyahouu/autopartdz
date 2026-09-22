@@ -1,51 +1,112 @@
+import { CheckCircle2, Clock, AlertTriangle, AlertCircle, MapPin, Globe } from 'lucide-react';
+
 const STATUS_MAP = {
-  // Routine in-progress — ink-2 badge
-  needed:           { label: 'Needed',            cls: 'badge-progress' },
-  sent_to_china:    { label: 'Sent to China',      cls: 'badge-progress' },
-  printed:          { label: 'Printed',            cls: 'badge-progress' },
-  arrived_at_office:{ label: 'Arrived at Office',  cls: 'badge-progress' },
-  packaged:         { label: 'Packaged',           cls: 'badge-progress' },
-  sent_to_client:   { label: 'Sent to Client',     cls: 'badge-progress' },
+  // Routine in-progress — neutral slate
+  needed:            { label: 'Needed',            type: 'neutral', icon: Clock },
+  sent_to_china:     { label: 'Sent to China',      type: 'neutral', icon: Globe },
+  printed:           { label: 'Printed',            type: 'neutral', icon: CheckCircle2 },
+  arrived_at_office: { label: 'Arrived at Office',  type: 'neutral', icon: MapPin },
+  packaged:          { label: 'Packaged',           type: 'neutral', icon: CheckCircle2 },
+  sent_to_client:    { label: 'Sent to Client',     type: 'neutral', icon: Globe },
 
-  // Needs attention — attention ochre
-  pending_admin_review: { label: 'Pending Review', cls: 'badge-attention' },
-  shipped:              { label: 'Shipped',         cls: 'badge-attention' },
+  // Needs attention — subtle amber
+  pending_admin_review: { label: 'Pending Review',  type: 'amber',   icon: AlertTriangle },
+  shipped:              { label: 'Shipped',         type: 'amber',   icon: Clock },
 
-  // Problem — stamp red
-  needs_correction: { label: 'Needs Correction',   cls: 'badge-problem' },
+  // Problem — subtle red
+  needs_correction:     { label: 'Needs Correction',type: 'danger',  icon: AlertCircle },
 
-  // Terminal success — ok green (filled)
-  delivered: { label: 'Delivered', cls: 'badge-ok filled' },
+  // Terminal success — subtle green
+  delivered:            { label: 'Delivered',       type: 'success', icon: CheckCircle2 },
 
   // Order-level statuses
-  pending:             { label: 'Pending',             cls: 'badge-attention' },
-  confirmed:           { label: 'Confirmed',           cls: 'badge-progress' },
-  in_progress:         { label: 'In Progress',         cls: 'badge-progress' },
-  ready_for_dispatch:  { label: 'Ready for Dispatch',  cls: 'badge-attention' },
-  cancelled:           { label: 'Cancelled',           cls: 'badge-problem' },
+  pending:              { label: 'Pending',         type: 'amber',   icon: Clock },
+  confirmed:            { label: 'Confirmed',       type: 'neutral', icon: CheckCircle2 },
+  in_progress:          { label: 'In Progress',     type: 'neutral', icon: Clock },
+  ready_for_dispatch:   { label: 'Ready Dispatch',  type: 'amber',   icon: Clock },
+  cancelled:            { label: 'Cancelled',       type: 'danger',  icon: AlertCircle },
 };
 
 const PROVENANCE_MAP = {
-  local: { label: 'Local',  cls: 'badge-ok' },
-  china: { label: 'China',  cls: 'badge-china' },
+  local: { label: 'Local (Algeria)', type: 'success', icon: MapPin },
+  china: { label: 'China',          type: 'blue',    icon: Globe },
 };
 
-/**
- * <Badge status="needed" />
- * <Badge status="local" isProvenance />
- * <Badge label="Custom" className="badge-progress" />
- */
-export default function Badge({ status, isProvenance, label, className }) {
-  if (label && className) {
-    return <span className={`badge ${className}`}>{label}</span>;
+const TYPE_STYLES = {
+  neutral: {
+    bg: '#f8fafc',
+    text: '#475569',
+    border: '#e2e8f0',
+  },
+  success: {
+    bg: '#f0fdf4',
+    text: '#15803d',
+    border: '#bbf7d0',
+  },
+  blue: {
+    bg: '#eff6ff',
+    text: '#1d4ed8',
+    border: '#bfdbfe',
+  },
+  amber: {
+    bg: '#fffbeb',
+    text: '#b45309',
+    border: '#fde68a',
+  },
+  danger: {
+    bg: '#fef2f2',
+    text: '#b91c1c',
+    border: '#fecaca',
+  },
+};
+
+export default function Badge({ status, isProvenance, label, type = 'neutral' }) {
+  if (label) {
+    const s = TYPE_STYLES[type] || TYPE_STYLES.neutral;
+    return (
+      <span
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 5,
+          padding: '2px 8px',
+          borderRadius: 9999,
+          fontSize: 11.5,
+          fontWeight: 500,
+          background: s.bg,
+          color: s.text,
+          border: `1px solid ${s.border}`,
+          whiteSpace: 'nowrap',
+        }}
+      >
+        {label}
+      </span>
+    );
   }
 
   const map = isProvenance ? PROVENANCE_MAP : STATUS_MAP;
-  const entry = map[status];
+  const entry = map[status] || { label: status ?? '—', type: 'neutral', icon: null };
+  const s = TYPE_STYLES[entry.type] || TYPE_STYLES.neutral;
+  const Icon = entry.icon;
 
-  if (!entry) {
-    return <span className="badge badge-progress">{status ?? '—'}</span>;
-  }
-
-  return <span className={`badge ${entry.cls}`}>{entry.label}</span>;
+  return (
+    <span
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 5,
+        padding: '2px 8px',
+        borderRadius: 9999,
+        fontSize: 11.5,
+        fontWeight: 500,
+        background: s.bg,
+        color: s.text,
+        border: `1px solid ${s.border}`,
+        whiteSpace: 'nowrap',
+      }}
+    >
+      {Icon && <Icon size={12} strokeWidth={2.2} />}
+      <span>{entry.label}</span>
+    </span>
+  );
 }
