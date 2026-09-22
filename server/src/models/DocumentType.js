@@ -24,10 +24,12 @@ const documentTypeSchema = new mongoose.Schema(
       type: String,
       default: '',
     },
+    // Optional but unique when present.
+    // The sparse index (defined below) means documents with no code field
+    // do not conflict — only documents that truly have a code value are indexed.
+    // Routes must strip this field entirely (not set null/"") when not provided.
     code: {
       type: String,
-      required: [true, 'Code is required'],
-      unique: true,
       uppercase: true,
       trim: true,
     },
@@ -82,5 +84,9 @@ const documentTypeSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+
+// Sparse unique index: only indexes documents where `code` actually exists.
+// Multiple documents with no code field (null/undefined/absent) do not conflict.
+documentTypeSchema.index({ code: 1 }, { unique: true, sparse: true });
 
 module.exports = mongoose.model('DocumentType', documentTypeSchema);

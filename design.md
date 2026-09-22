@@ -381,3 +381,232 @@ These elements prevent generic output and define this style:
 - All shadows are flat/hard (no blur), which is cheap to render
 - CSS custom properties drive the entire palette, including a dark-mode variant switched via `prefers-color-scheme` and an explicit `data-theme` override
 - The paper-grain texture is a tiny inline SVG data-URI, not an image request
+
+---
+
+## Language & Locale Strategy
+
+Three surfaces, three sets of rules. Both tiers share the same design tokens — locale and tier are independent axes.
+
+### Surface rules
+
+| Surface | Language(s) | Direction | Switcher |
+|:--------|:------------|:----------|:---------|
+| **Client-facing** (landing, demand form, tracking lookup) | Arabic (default), French, English | RTL when Arabic active; LTR for French/English | Visible language picker |
+| **Admin panel** | English only | LTR | None |
+| **China-associate portal** | English only | LTR | None |
+
+### Typography for LTR surfaces
+
+Reem Kufi and IBM Plex Sans Arabic are Arabic-script faces and do not apply to LTR surfaces.
+
+- **Body (all LTR surfaces):** `"IBM Plex Sans", "Segoe UI", system-ui, sans-serif` — the Latin sibling of IBM Plex Sans Arabic, preserving typeface consistency across the brand.
+- **Display/Headlines (LTR client pages only):** `"DM Sans", "IBM Plex Sans", system-ui, sans-serif` at weights 700 + 500. DM Sans is a geometric sans with the same rational, official density as Reem Kufi at headline sizes — slightly condensed at heavy weight, reads as typeset rather than decorative. Space Grotesk was evaluated but its ink traps tip toward personality-first; DM Sans stays authoritative and neutral, better suited to document-administration context.
+- **Console-tier surfaces (Admin, China portal):** No display face. IBM Plex Sans alone at multiple weights (400, 500, 600, 700) is sufficient — these are dense working screens where display flourish adds noise, not warmth.
+- **Monospace (all surfaces):** Reserved for tracking codes and order numbers, always `direction:ltr`, as documented.
+
+### i18n implementation
+
+- Client-facing surface: `react-i18next` for the three locales. All client-facing UI strings live in locale files from the start — no inline literals.
+- Admin and China portals: single-language (English). Strings live in a `src/constants/strings.js` file rather than scattered inline, for maintainability. No i18n library needed.
+
+---
+
+## Two-Tier Styling System
+
+Both tiers share the same design tokens (colors, the ink/stamp palette, dashed-rule and solid-border logic). This is **one design system with two expression modes**, not two separate systems.
+
+### Moment Tier
+
+**Applies to:** The client-facing site's hero, the demand form, the tracking-code reveal, and order confirmation.
+
+Full Dossier expression as documented above: rotation, hard offset stacked-paper shadows, the dossier/folder asymmetric-radius motif, staggered status reveals, stamp treatment on codes. No changes — this tier is fully specified in the sections above.
+
+### Console Tier
+
+**Applies to:** The Admin panel and the China-associate portal in their entirety — catalog tables, CRUD forms, order queues, document review screens.
+
+These are dense, high-frequency working screens (scanned dozens of times a day). Moment-tier flourish becomes noise rather than warmth here.
+
+**Console-tier constraints:**
+
+| Rule | Detail |
+|:-----|:-------|
+| No rotation | Zero `transform: rotate()` on any element, anywhere |
+| No stacked shadows on routine surfaces | No `shadow-paper` on table rows, list items, or standard form panels. Reserve for at most **one** focal element per screen (e.g. a modal/drawer) |
+| Dashed row dividers | `1–1.5px dashed var(--line)` between rows/items; `2px solid var(--ink)` for the table/panel frame |
+| Tighter spacing | ~35% tighter padding than Moment tier; 48px minimum touch target preserved |
+| Simplified card shape | `border: 1.5–2px solid var(--ink)`, uniform `border-radius: 4–6px` — same material as Moment tier, no asymmetric folder-tab motif |
+| Button shadow rules | Primary actions ("Create", "Confirm", "Save"): full `shadow-stamp` treatment. Secondary/inline actions (row "Edit", active toggles): outline only, no shadow at rest. Physical press (translate + shadow collapse) kept on both for consistency |
+
+### Status & Badge System (Console Tier)
+
+A consistent badge system for order and document-line statuses. Reuses existing tokens where meaning aligns; adds exactly **one** new functional color.
+
+| Status group | States | Badge style |
+|:-------------|:-------|:------------|
+| **Provenance** | `local`, `china` | Existing `--ok` green / `--china` blue bordered pills — no change |
+| **Routine in-progress** | `needed`, `sent_to_china`, `printed`, `arrived_at_office`, `packaged`, `sent_to_client` | `--ink-2` bordered pill, no fill (or very light `--page` tint) — normal progress, no alarm |
+| **Needs attention** | `pending_admin_review`, `isDelayed` flag | **`--attention`** ochre bordered pill with light attention-tint background |
+| **Problem** | `needs_correction` | `--stamp` red bordered pill — consistent with its documented "errors that matter" role |
+| **Terminal success** | `delivered` | `--ok` green solid pill (filled, to mark completion) |
+
+#### New Token: `attention`
+
+**Value:** `#8a6500` (light) / `#d4a84b` (dark)
+
+**Derivation:** Dark golden ochre — derived from oxidised ink, sitting squarely inside the parchment/manila warmth of the existing palette. Passes contrast on both `card` (#f8f2e2) and `page` (#efe6d0) at its dark value. Clearly distinct from `stamp` red in both hue (yellow-orange vs. red) and lightness value, so colorblind users also distinguish the "pause and look" vs. "something broke" meanings. Does not overlap with `ok` green or `china` blue functional meanings. Dark mode `#d4a84b` reads as warm gold against the `#0f1729` navy paper.
+
+**Updated token table:**
+
+| Token | Value (light) | Value (dark) | Usage & Context |
+|:------|:---------------|:---------------|:-----------------|
+| `page` | `#efe6d0` | `#0f1729` | Primary canvas. |
+| `page-2` | `#e6dabc` | `#0b1221` | Alternating section background. |
+| `manila` | `#dcc590` | `#5d5236` | Folder-tan surfaces — dossier motif, type-picker cards. |
+| `card` | `#f8f2e2` | `#18233d` | Lightest paper — form cards, results, elevated content. |
+| `ink` | `#16233f` | `#eee5cf` | Primary text and structural borders. |
+| `ink-2` | `#465170` | `#b7b09b` | Secondary text, muted labels. |
+| `stamp` | `#a8231b` | `#ea6b60` | Single hot accent — codes, kicker, required, errors, active state. |
+| `attention` | `#8a6500` | `#d4a84b` | **NEW.** "Needs attention" — pending review, delayed. |
+| `line` | `rgba(22,35,63,.28)` | `rgba(238,229,207,.3)` | Dashed rules and dividers. |
+| `shadow` | `rgba(22,35,63,.22)` | `rgba(0,0,0,.45)` | Hard offset stacked-paper shadows. |
+| `ok` | `#1e6a44` | `#5ec48f` | Local provenance / terminal success. |
+| `china` | `#3a5e8c` | `#7fa8d6` | China-sourced provenance. |
+
+You already have design.md (the "Dossier" system) fully internalized.
+This prompt extends it in two ways: (1) a language/locale strategy
+across the platform's three surfaces, and (2) a two-tier styling
+system, since Dossier as documented is built for high-emotion,
+low-frequency moments (hero, tracking reveal) and Phase 2 needs dense,
+fast-scanning admin screens using the same visual DNA.
+
+Update design.md to add both sections below, then confirm your
+understanding before any component code is written.
+
+## 1. Language & locale strategy
+
+Three surfaces, three language rules:
+
+- CLIENT-FACING (public site: landing page, demand form, tracking
+  lookup): supports Arabic, French, and English, with a visible
+  language switcher. Arabic is the default/primary locale. When the
+  active locale is Arabic, the page is dir="rtl" using Dossier exactly
+  as documented (Reem Kufi + IBM Plex Sans Arabic, logical CSS
+  properties). When the active locale is French or English, the page
+  is dir="ltr".
+
+- ADMIN PANEL: English only, dir="ltr", no language switcher needed.
+
+- CHINA-ASSOCIATE PORTAL: English only, dir="ltr", no language
+  switcher needed.
+
+### Typography for LTR surfaces (French/English client pages, and
+### both Admin and China portals)
+
+Reem Kufi and IBM Plex Sans Arabic are Arabic-script faces and do not
+apply here. Define a Latin-script pairing that preserves the same
+personality (geometric, official, "stamped" for display; clean and
+dense for body) rather than defaulting to a generic sans stack. Use
+IBM Plex Sans (the Latin sibling of IBM Plex Sans Arabic already in
+the system) for body text on every LTR surface, for typeface
+consistency across the brand. For display/headline use on LTR client
+pages, choose a geometric sans with the same official/stamped
+character as Reem Kufi (evaluate options such as Space Grotesk or
+similar geometric faces) — propose your specific choice with
+reasoning before implementing. Console-tier surfaces (Admin, China
+portal — see section 2) do not need a display face at all; IBM Plex
+Sans alone, at appropriate weights, is sufficient there.
+
+### i18n implementation
+
+Use a standard React i18n library (e.g. react-i18next) for the
+client-facing surface's three locales. Keep all client-facing UI
+strings in locale files from the start, not hardcoded — Admin and
+China portal strings do not need this since they're single-language,
+but should still live in a strings/constants file rather than
+scattered inline literals, for maintainability.
+
+## 2. Two-tier styling system
+
+Both tiers share the same design tokens (colors, the ink/stamp
+palette, dashed-rule and solid-border logic) — this is one design
+system with two expression modes, not two separate systems.
+
+### Moment tier
+Applies to: the client-facing site's hero, the demand form, the
+tracking-code reveal, order confirmation. Full Dossier expression as
+already documented in design.md: rotation, hard offset stacked-paper
+shadows, the dossier/folder motif, staggered status reveals, stamp
+treatment on codes. No changes here — this tier is already fully
+specified.
+
+### Console tier
+Applies to: the Admin panel and the China-associate portal in their
+entirety — catalog tables, CRUD forms, order queues, document review
+screens. These are dense, high-frequency working screens (scanned
+dozens of times a day), where Moment-tier flourish becomes noise
+rather than warmth. Define this tier with the following adjustments:
+
+- NO rotation on any element, anywhere in the console tier.
+- NO hard-offset stacked shadows on routine surfaces (table rows,
+  list cards, standard form panels). Reserve the shadow-paper effect
+  for at most one focal element per screen if genuinely useful (e.g. a
+  modal/drawer), never on repeating list items.
+- Tables/lists use the same solid 1.5-2px ink borders for structural
+  edges and dashed --line dividers between rows, exactly as the
+  documented dashed-rule system already does for list items — reuse
+  this rather than inventing a new row-divider style.
+- Tighter spacing than Moment tier: this is a working tool, not a
+  marketing page. Reduce section/component padding roughly 30-40%
+  from the documented Moment-tier values, while keeping the 48px
+  minimum touch target for inputs/buttons.
+- Buttons keep the physical press interaction (translate + shadow
+  collapse on :active) since that's cheap and consistent, but skip
+  the -4px/4px stamp shadow at rest for secondary/routine actions in
+  dense tables (e.g. inline row actions) — reserve the full solid
+  stamp-shadow button treatment for primary, infrequent actions (e.g.
+  "Create Document Type", "Confirm Order").
+- The dossier/folder asymmetric-radius motif is reserved for Moment
+  tier only. Console-tier cards/panels use a simpler, still-branded
+  shape: solid ink border, small uniform radius (4-6px), no
+  asymmetry — reads as "the same material," not "the same flourish."
+
+### Status & badge system (console tier)
+
+The order and document-line lifecycles defined in the platform's data
+model have far more states than the two provenance tags (ok=local,
+china=from China) the documented palette currently covers. Define a
+small, consistent badge system for these statuses, reusing existing
+tokens where meaning aligns and adding no more than ONE new functional
+color if genuinely needed:
+
+- Provenance (source: local/china): reuse the existing ok/china colors
+  exactly as documented — no change.
+- Routine in-progress states (needed, sent_to_china, printed, arrived_
+  at_office, packaged, sent_to_client): a neutral ink-2-bordered badge,
+  unfilled or very lightly tinted — these are normal progress, not
+  something demanding attention.
+- Needs attention (pending_admin_review, isDelayed flag): should read
+  as "look at this" without competing with the stamp-red "needs_
+  correction/error" meaning. Propose one new muted functional color
+  (e.g. a warm amber/ochre that fits the parchment palette) for this
+  specific "awaiting action" meaning, distinct from stamp-red's
+  "correction needed/error" meaning — explain your color choice
+  against the existing palette before implementing.
+- Problem states (needs_correction): use stamp-red, consistent with
+  its documented "errors and things that matter" role.
+- Terminal success (delivered): use the existing ok green.
+
+Propose the exact hex value and document it in design.md's token
+table alongside the existing palette, with the same light/dark mode
+treatment the other tokens have.
+
+## Deliverable
+
+Update design.md with both new sections. Do not write any component
+or screen code in this step. Once updated, summarize back: your
+chosen LTR display typeface and why, your chosen "needs attention"
+color and why, and confirm you understand which surfaces get which
+tier and which locale rules. Wait for confirmation before Phase 2
+functional work begins.

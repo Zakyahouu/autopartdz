@@ -1,0 +1,80 @@
+/* ═══════════════════════════════════════════════════════════════════
+   Dossier Design System — CSS Custom Properties
+   All surfaces (Moment + Console tier) share these tokens.
+   Tier-specific rules live in console.css.
+═══════════════════════════════════════════════════════════════════ */
+
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap');
+
+:root {
+  /* ── Palette ────────────────────────────────────────────────── */
+  --page:       #efe6d0;  /* warm parchment canvas               */
+  --page-2:     #e6dabc;  /* slightly deeper parchment           */
+  --manila:     #dcc590;  /* folder-tan, dossier motif           */
+  --card:       #f8f2e2;  /* lightest paper, elevated surfaces   */
+  --ink:        #16233f;  /* deep navy — primary text & borders  */
+  --ink-2:      #465170;  /* softer navy-gray — secondary text   */
+  --stamp:      #a8231b;  /* rubber-stamp red — single accent    */
+  --attention:  #8a6500;  /* dark ochre — "needs attention"      */
+  --ok:         #1e6a44;  /* forest green — local / delivered    */
+  --china:      #3a5e8c;  /* steel blue — China-sourced          */
+
+  /* ── Functional derived ─────────────────────────────────────── */
+  --line:        rgba(22, 35, 63, 0.28);   /* dashed rules        */
+  --shadow:      rgba(22, 35, 63, 0.22);   /* hard-offset shadows */
+
+  /* ── Tints (for badge backgrounds) ─────────────────────────── */
+  --attention-tint: rgba(138, 101, 0, 0.10);
+  --stamp-tint:     rgba(168, 35, 27, 0.08);
+  --ok-tint:        rgba(30, 106, 68, 0.10);
+  --china-tint:     rgba(58, 94, 140, 0.10);
+
+  /* ── Shadow system (hard offset, zero blur) ─────────────────── */
+  --shadow-stamp:        -4px 4px 0 var(--stamp);
+  --shadow-stamp-active: -1px 1px 0 var(--stamp);
+  --shadow-paper:        -6px 6px 0 var(--shadow);
+  --shadow-paper-sm:     -4px 4px 0 var(--shadow);
+
+  /* ── Focus ring ─────────────────────────────────────────────── */
+  --focus-glow: 0 0 0 3px rgba(168, 35, 27, 0.22);
+
+  /* ── Typography — Console tier (IBM Plex Sans LTR) ──────────── */
+  --font-body:  'IBM Plex Sans', 'Segoe UI', system-ui, sans-serif;
+  --font-mono:  ui-monospace, Menlo, Consolas, monospace;
+
+  /* ── Spacing — Console tier (35% tighter than Moment) ───────── */
+  --space-xs:  4px;
+  --space-sm:  8px;
+  --space-md:  14px;
+  --space-lg:  20px;
+  --space-xl:  28px;
+
+  /* ── Radii ──────────────────────────────────────────────────── */
+  --radius-console: 5px;   /* console tier: uniform, no asymmetry */
+  --radius-input:   6px;
+
+  /* ── Transitions ─────────────────────────────────────────────── */
+  --t: 150ms;
+}
+
+/* Dark mode token overrides */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --page:       #0f1729;
+    --page-2:     #0b1221;
+    --manila:     #5d5236;
+    --card:       #18233d;
+    --ink:        #eee5cf;
+    --ink-2:      #b7b09b;
+    --stamp:      #ea6b60;
+    --attention:  #d4a84b;
+    --ok:         #5ec48f;
+    --china:      #7fa8d6;
+    --line:       rgba(238, 229, 207, 0.30);
+    --shadow:     rgba(0, 0, 0, 0.45);
+    --attention-tint: rgba(212, 168, 75, 0.12);
+    --stamp-tint:     rgba(234, 107, 96, 0.10);
+    --ok-tint:        rgba(94, 196, 143, 0.10);
+    --china-tint:     rgba(127, 168, 214, 0.10);
+  }
+}

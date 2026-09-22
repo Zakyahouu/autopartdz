@@ -4,6 +4,9 @@ const cors = require('cors');
 const authRoutes = require('./routes/auth');
 const usersRoutes = require('./routes/users');
 const healthRoutes = require('./routes/health');
+const documentTypesRoutes = require('./routes/documentTypes');
+const carCategoriesRoutes = require('./routes/carCategories');
+const filesRoutes = require('./routes/files');
 
 const app = express();
 
@@ -25,6 +28,9 @@ app.use(express.urlencoded({ extended: true }));
 app.use('/api/health', healthRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/users', usersRoutes);
+app.use('/api/document-types', documentTypesRoutes);
+app.use('/api/car-categories', carCategoriesRoutes);
+app.use('/api/files', filesRoutes);
 
 // ── 404 catch-all ────────────────────────────────────────────────────────────
 app.use((req, res) => {
