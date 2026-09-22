@@ -360,7 +360,7 @@ export default function ClientPortalPage() {
   };
 
   return (
-    <div className="moment-shell">
+    <div className="moment-shell" dir={isRtl ? 'rtl' : 'ltr'}>
       <PublicNavbar />
 
       <main className="moment-container">

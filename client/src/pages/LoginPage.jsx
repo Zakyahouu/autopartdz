@@ -30,14 +30,17 @@ export default function LoginPage() {
   };
 
   return (
-    <div style={{
-      minHeight: '100vh',
-      backgroundColor: 'var(--admin-bg)',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      padding: 24,
-    }}>
+    <div
+      dir="ltr"
+      style={{
+        minHeight: '100vh',
+        backgroundColor: 'var(--admin-bg)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 24,
+      }}
+    >
       <div style={{
         width: 'min(400px, 100%)',
         backgroundColor: 'var(--admin-surface)',

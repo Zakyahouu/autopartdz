@@ -417,18 +417,11 @@ i18n.use(initReactI18next).init({
   },
 });
 
-// Sync dir attribute
-function updateDir(lang) {
-  const dir = lang === 'ar' ? 'rtl' : 'ltr';
-  document.documentElement.dir = dir;
-  document.documentElement.lang = lang;
-}
-
-updateDir(savedLang);
+// Keep root document LTR by default so internal Admin Dashboard is never flipped
+document.documentElement.dir = 'ltr';
 
 i18n.on('languageChanged', (lng) => {
   localStorage.setItem('autopartdz_locale', lng);
-  updateDir(lng);
 });
 
 export default i18n;

@@ -74,6 +74,7 @@ body {
 
 /* ── App Shell Layout ────────────────────────────────────────────── */
 .admin-layout {
+  direction: ltr;
   display: flex;
   height: 100vh;
   overflow: hidden;

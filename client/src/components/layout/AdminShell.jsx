@@ -40,7 +40,7 @@ export default function AdminShell() {
   }
 
   return (
-    <div className="admin-layout">
+    <div className="admin-layout" dir="ltr">
       {/* Fixed Left Sidebar */}
       <Sidebar />
 
