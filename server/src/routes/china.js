@@ -33,6 +33,11 @@ router.get('/lines', async (req, res) => {
     const lines = await OrderDocumentLine.find(filter)
       .populate('documentTypeId', '_id shortName fullName code')
       .populate('orderId', 'vin carModel')
+      .populate({
+        path: 'uploadedFiles',
+        select: '_id filename contentType size uploadedAt uploadedByUserId',
+        populate: { path: 'uploadedByUserId', select: '_id name email role' },
+      })
       .sort({ createdAt: -1 })
       .lean();
 
@@ -56,6 +61,19 @@ router.get('/lines', async (req, res) => {
         status: line.status,
         shippingTrackingCode: line.shippingTrackingCode || null,
         isDelayed: Boolean(line.isDelayed),
+        uploadedFiles: (line.uploadedFiles || []).map((f) => ({
+          id: f._id ? f._id.toString() : f.toString(),
+          filename: f.filename || 'Document',
+          contentType: f.contentType || '',
+          size: f.size || 0,
+          uploadedAt: f.uploadedAt || null,
+          uploadedBy: f.uploadedByUserId
+            ? {
+                name: f.uploadedByUserId.name || 'User',
+                role: f.uploadedByUserId.role || '',
+              }
+            : null,
+        })),
         createdAt: line.createdAt,
       };
     });

@@ -98,7 +98,11 @@ router.get('/:id', async (req, res) => {
         select: '_id shortName fullName code category defaultSource hasTranslation pricing active',
       })
       .populate('assignedChinaAccountId', '_id name email role active')
-      .populate('uploadedFiles', '_id filename contentType size uploadedAt')
+      .populate({
+        path: 'uploadedFiles',
+        select: '_id filename contentType size uploadedAt uploadedByUserId',
+        populate: { path: 'uploadedByUserId', select: '_id name email role' },
+      })
       .sort({ createdAt: 1 })
       .lean();
 
@@ -322,7 +326,11 @@ router.patch('/:id/confirm', async (req, res) => {
     const fullyPopulatedLines = await OrderDocumentLine.find({ orderId: order._id })
       .populate('documentTypeId', 'shortName fullName code category defaultSource')
       .populate('assignedChinaAccountId', '_id name email role active')
-      .populate('uploadedFiles', '_id filename contentType size uploadedAt')
+      .populate({
+        path: 'uploadedFiles',
+        select: '_id filename contentType size uploadedAt uploadedByUserId',
+        populate: { path: 'uploadedByUserId', select: '_id name email role' },
+      })
       .lean();
 
     return res.json({

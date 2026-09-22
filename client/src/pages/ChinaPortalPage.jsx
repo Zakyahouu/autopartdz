@@ -19,6 +19,8 @@ import {
   Car,
   Copy,
   Check,
+  Paperclip,
+  Download,
 } from 'lucide-react';
 
 export default function ChinaPortalPage() {
@@ -44,6 +46,13 @@ export default function ChinaPortalPage() {
   const [delayNote, setDelayNote] = useState('');
   const [delayBusy, setDelayBusy] = useState(false);
   const [delayError, setDelayError] = useState('');
+
+  // Attach File Modal
+  const [attachModalLine, setAttachModalLine] = useState(null);
+  const [attachFile, setAttachFile] = useState(null);
+  const [attachNote, setAttachNote] = useState('');
+  const [attachBusy, setAttachBusy] = useState(false);
+  const [attachError, setAttachError] = useState('');
 
   const [copiedVin, setCopiedVin] = useState('');
 
@@ -160,6 +169,62 @@ export default function ChinaPortalPage() {
       setDelayError(err.message);
     } finally {
       setDelayBusy(false);
+    }
+  };
+
+  // Submit Attach File
+  const handleAttachSubmit = async (e) => {
+    e.preventDefault();
+    if (!attachFile) {
+      setAttachError('Please select a file to attach.');
+      return;
+    }
+    try {
+      setAttachBusy(true);
+      setAttachError('');
+      const formData = new FormData();
+      formData.append('file', attachFile);
+      if (attachNote.trim()) formData.append('note', attachNote.trim());
+
+      const authToken = token || localStorage.getItem('autopartdz_token');
+      const res = await fetch(`/api/order-lines/${attachModalLine.id}/files`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${authToken}` },
+        body: formData,
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to attach file');
+
+      setAttachModalLine(null);
+      setAttachFile(null);
+      setAttachNote('');
+      await fetchLines();
+    } catch (err) {
+      setAttachError(err.message);
+    } finally {
+      setAttachBusy(false);
+    }
+  };
+
+  // Download / View File Helper
+  const handleDownloadFile = async (fileId, filename) => {
+    try {
+      const authToken = token || localStorage.getItem('autopartdz_token');
+      const res = await fetch(`/api/files/${fileId}`, {
+        headers: { Authorization: `Bearer ${authToken}` },
+      });
+      if (!res.ok) throw new Error('Failed to retrieve file.');
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename || 'document';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => window.URL.revokeObjectURL(url), 10000);
+    } catch (err) {
+      alert(err.message || 'Error downloading file');
     }
   };
 
@@ -450,6 +515,62 @@ export default function ChinaPortalPage() {
                           <div style={{ fontSize: 11, color: '#94a3b8', fontFamily: 'monospace', marginTop: 2 }}>
                             {line.documentType?.code || line.id}
                           </div>
+
+                          {/* Uploaded Documents List */}
+                          {line.uploadedFiles && line.uploadedFiles.length > 0 && (
+                            <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                              <div style={{ fontSize: 11, color: '#94a3b8', display: 'flex', alignItems: 'center', gap: 4 }}>
+                                <FileText size={11} />
+                                <span>Uploaded Files ({line.uploadedFiles.length}):</span>
+                              </div>
+                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                                {line.uploadedFiles.map((f) => {
+                                  const uploader = f.uploadedBy?.name || 'Associate';
+                                  const uploadDate = f.uploadedAt ? new Date(f.uploadedAt).toLocaleDateString() : '';
+                                  const fileSizeKb = f.size ? `${Math.round(f.size / 1024)} KB` : '';
+                                  return (
+                                    <div
+                                      key={f.id}
+                                      style={{
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: 6,
+                                        backgroundColor: '#0f172a',
+                                        border: '1px solid #334155',
+                                        borderRadius: 4,
+                                        padding: '2px 8px',
+                                        fontSize: 11,
+                                      }}
+                                    >
+                                      <FileText size={11} color="#d97706" />
+                                      <span style={{ color: '#f8fafc', maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={f.filename}>
+                                        {f.filename}
+                                      </span>
+                                      <span style={{ fontSize: 10, color: '#64748b' }}>
+                                        {fileSizeKb && `(${fileSizeKb})`} • {uploader} • {uploadDate}
+                                      </span>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleDownloadFile(f.id, f.filename)}
+                                        style={{
+                                          border: 'none',
+                                          background: 'transparent',
+                                          cursor: 'pointer',
+                                          color: '#38bdf8',
+                                          display: 'inline-flex',
+                                          alignItems: 'center',
+                                          padding: 2,
+                                        }}
+                                        title="View or download document"
+                                      >
+                                        <Download size={11} />
+                                      </button>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
                         </td>
 
                         {/* Vehicle Info */}
@@ -547,6 +668,33 @@ export default function ChinaPortalPage() {
                         {/* Actions */}
                         <td style={{ padding: '14px 16px', textAlign: 'right' }}>
                           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8 }}>
+                            {/* Attach File Button */}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setAttachModalLine(line);
+                                setAttachFile(null);
+                                setAttachNote('');
+                                setAttachError('');
+                              }}
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: 4,
+                                padding: '6px 12px',
+                                borderRadius: 6,
+                                border: '1px solid #475569',
+                                backgroundColor: '#1e293b',
+                                color: '#cbd5e1',
+                                fontSize: 12,
+                                cursor: 'pointer',
+                              }}
+                              title="Attach document scan / file to line"
+                            >
+                              <Paperclip size={12} />
+                              <span>Attach</span>
+                            </button>
+
                             {isShippable && (
                               <button
                                 type="button"
@@ -878,6 +1026,138 @@ export default function ChinaPortalPage() {
                 >
                   {delayBusy && <RefreshCw size={14} className="spin-animate" />}
                   <span>{delayIsDelayed ? 'Confirm Delay' : 'Clear Delay'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Attach Document File Modal (China Associate) */}
+      {attachModalLine && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.75)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 100,
+            padding: 16,
+          }}
+        >
+          <div
+            style={{
+              backgroundColor: '#1e293b',
+              border: '1px solid #334155',
+              borderRadius: 12,
+              width: 'min(480px, 100%)',
+              padding: 24,
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+              <div style={{ fontSize: 18, fontWeight: 700, color: '#f8fafc' }}>
+                Attach Document File
+              </div>
+              <button
+                type="button"
+                onClick={() => setAttachModalLine(null)}
+                style={{ border: 'none', background: 'transparent', color: '#94a3b8', cursor: 'pointer' }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div style={{ fontSize: 13, color: '#cbd5e1', marginBottom: 16 }}>
+              Attaching document scan/proof to <strong>{attachModalLine.documentType?.fullName || 'Document'}</strong> ({attachModalLine.order?.vin}) without changing line status.
+            </div>
+
+            {attachError && (
+              <div style={{ padding: '8px 12px', borderRadius: 6, backgroundColor: 'rgba(239, 68, 68, 0.2)', color: '#f87171', fontSize: 13, marginBottom: 16 }}>
+                {attachError}
+              </div>
+            )}
+
+            <form onSubmit={handleAttachSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#94a3b8', marginBottom: 6 }}>
+                  Select File (Max 12MB) <span style={{ color: '#ef4444' }}>*</span>
+                </label>
+                <input
+                  type="file"
+                  onChange={(e) => setAttachFile(e.target.files?.[0] || null)}
+                  required
+                  style={{
+                    width: '100%',
+                    padding: '8px 12px',
+                    borderRadius: 6,
+                    border: '1px solid #475569',
+                    backgroundColor: '#0f172a',
+                    color: '#f8fafc',
+                    fontSize: 13,
+                    boxSizing: 'border-box',
+                  }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#94a3b8', marginBottom: 6 }}>
+                  Note / Description (Optional)
+                </label>
+                <textarea
+                  rows={2}
+                  placeholder="e.g. Scanned export certificate copy..."
+                  value={attachNote}
+                  onChange={(e) => setAttachNote(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '8px 12px',
+                    borderRadius: 6,
+                    border: '1px solid #475569',
+                    backgroundColor: '#0f172a',
+                    color: '#f8fafc',
+                    fontSize: 13,
+                    outline: 'none',
+                    boxSizing: 'border-box',
+                  }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 10 }}>
+                <button
+                  type="button"
+                  onClick={() => setAttachModalLine(null)}
+                  style={{
+                    padding: '8px 16px',
+                    borderRadius: 6,
+                    border: '1px solid #475569',
+                    backgroundColor: 'transparent',
+                    color: '#94a3b8',
+                    cursor: 'pointer',
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={attachBusy}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    padding: '8px 20px',
+                    borderRadius: 6,
+                    border: 'none',
+                    backgroundColor: '#d97706',
+                    color: '#ffffff',
+                    fontWeight: 600,
+                    cursor: attachBusy ? 'not-allowed' : 'pointer',
+                    opacity: attachBusy ? 0.7 : 1,
+                  }}
+                >
+                  {attachBusy && <RefreshCw size={14} className="spin-animate" />}
+                  <span>Upload & Attach</span>
                 </button>
               </div>
             </form>

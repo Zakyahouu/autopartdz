@@ -21,6 +21,8 @@ import {
   Copy,
   Check,
   RefreshCw,
+  Paperclip,
+  Download,
 } from 'lucide-react';
 
 export default function OrderDetailPage() {
@@ -70,6 +72,13 @@ export default function OrderDetailPage() {
 
   // Delete confirmation modal
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+
+  // Attach file modal
+  const [attachModalLine, setAttachModalLine] = useState(null);
+  const [attachFile, setAttachFile] = useState(null);
+  const [attachNote, setAttachNote] = useState('');
+  const [attachBusy, setAttachBusy] = useState(false);
+  const [attachError, setAttachError] = useState('');
 
   const loadOrderDetail = async () => {
     setLoading(true);
@@ -320,6 +329,62 @@ export default function OrderDetailPage() {
       setProxyDelayError(err.message);
     } finally {
       setProxyDelayBusy(false);
+    }
+  };
+
+  // Attach document file submit (without status change)
+  const handleAttachSubmit = async (e) => {
+    e.preventDefault();
+    if (!attachFile) {
+      setAttachError('Please select a file to attach.');
+      return;
+    }
+    setAttachBusy(true);
+    setAttachError('');
+    try {
+      const formData = new FormData();
+      formData.append('file', attachFile);
+      if (attachNote.trim()) formData.append('note', attachNote.trim());
+
+      const token = localStorage.getItem('autopartdz_token');
+      const res = await fetch(`/api/order-lines/${attachModalLine._id}/files`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to attach file');
+
+      setAttachModalLine(null);
+      setAttachFile(null);
+      setAttachNote('');
+      loadOrderDetail();
+    } catch (err) {
+      setAttachError(err.message);
+    } finally {
+      setAttachBusy(false);
+    }
+  };
+
+  // Download / View file helper
+  const handleDownloadFile = async (fileId, filename) => {
+    try {
+      const token = localStorage.getItem('autopartdz_token');
+      const res = await fetch(`/api/files/${fileId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error('Failed to retrieve file.');
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename || 'document';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => window.URL.revokeObjectURL(url), 10000);
+    } catch (err) {
+      alert(err.message || 'Error downloading file');
     }
   };
 
@@ -616,6 +681,63 @@ export default function OrderDetailPage() {
                           <strong>Correction Reason:</strong> {line.correctionReason}
                         </div>
                       )}
+
+                      {/* Uploaded Documents List */}
+                      {line.uploadedFiles && line.uploadedFiles.length > 0 && (
+                        <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                          <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--admin-text-secondary)', display: 'flex', alignItems: 'center', gap: 4 }}>
+                            <FileText size={11} />
+                            <span>Uploaded Files ({line.uploadedFiles.length}):</span>
+                          </div>
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                            {line.uploadedFiles.map((f) => {
+                              const uploaderName = f.uploadedByUserId?.name || 'User';
+                              const uploaderRole = f.uploadedByUserId?.role ? `(${f.uploadedByUserId.role})` : '';
+                              const uploadDate = f.uploadedAt ? new Date(f.uploadedAt).toLocaleDateString() : '';
+                              const fileSizeKb = f.size ? `${Math.round(f.size / 1024)} KB` : '';
+                              return (
+                                <div
+                                  key={f._id}
+                                  style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: 6,
+                                    backgroundColor: 'var(--admin-surface-2, #f8fafc)',
+                                    border: '1px solid var(--admin-border, #e2e8f0)',
+                                    borderRadius: 4,
+                                    padding: '2px 8px',
+                                    fontSize: 11,
+                                  }}
+                                >
+                                  <FileText size={12} color="var(--admin-accent)" />
+                                  <span style={{ fontWeight: 600, color: 'var(--admin-text-primary)' }} title={f.filename}>
+                                    {f.filename}
+                                  </span>
+                                  <span style={{ fontSize: 10, color: 'var(--admin-text-secondary)' }}>
+                                    {fileSizeKb && `(${fileSizeKb})`} • {uploaderName} {uploaderRole} • {uploadDate}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDownloadFile(f._id, f.filename)}
+                                    style={{
+                                      border: 'none',
+                                      background: 'transparent',
+                                      cursor: 'pointer',
+                                      color: 'var(--admin-accent)',
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      padding: 2,
+                                    }}
+                                    title="View or download document"
+                                  >
+                                    <Download size={12} />
+                                  </button>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
                     </td>
 
                     <td>
@@ -748,6 +870,23 @@ export default function OrderDetailPage() {
                         </button>
                       ) : (
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6, flexWrap: 'wrap' }}>
+                          {/* Attach File (without status change) */}
+                          <button
+                            type="button"
+                            className="btn-admin-secondary"
+                            onClick={() => {
+                              setAttachModalLine(line);
+                              setAttachFile(null);
+                              setAttachNote('');
+                              setAttachError('');
+                            }}
+                            style={{ padding: '4px 8px', fontSize: 11, display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                            title="Attach document scan / file to line"
+                          >
+                            <Paperclip size={11} />
+                            <span>Attach</span>
+                          </button>
+
                           {/* Admin Proxy Sourcing / Printing / Delay Actions */}
                           {line.source === 'china' && ['needed', 'sent_to_china'].includes(line.status) && (
                             <button
@@ -1127,6 +1266,68 @@ export default function OrderDetailPage() {
                   }}
                 >
                   {proxyDelayBusy ? 'Saving…' : proxyDelayIsDelayed ? 'Confirm Delay Flag' : 'Clear Delay Flag'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Attach Document File Modal (Admin) */}
+      {attachModalLine && (
+        <div className="admin-modal-backdrop" onClick={(e) => { if (e.target === e.currentTarget) setAttachModalLine(null); }}>
+          <div className="admin-modal-panel" role="dialog" aria-modal="true" style={{ width: 480 }}>
+            <div className="admin-modal-header">
+              <h2 className="admin-modal-title">Attach Document to Line</h2>
+              <button type="button" className="btn-admin-icon" onClick={() => setAttachModalLine(null)}>
+                <X size={16} />
+              </button>
+            </div>
+
+            <form onSubmit={handleAttachSubmit}>
+              <div className="admin-modal-body">
+                <div style={{ fontSize: 13, color: 'var(--admin-text-secondary)', marginBottom: 16 }}>
+                  Attaching file to <strong>{attachModalLine.documentTypeId?.fullName || 'Document'}</strong> without changing the line status.
+                </div>
+
+                {attachError && (
+                  <div className="admin-alert admin-alert-error" style={{ marginBottom: 12 }}>
+                    <AlertTriangle size={14} />
+                    <span>{attachError}</span>
+                  </div>
+                )}
+
+                <div className="admin-form-group">
+                  <label className="admin-form-label">
+                    Select File (Max 12MB) <span className="required">*</span>
+                  </label>
+                  <input
+                    type="file"
+                    className="admin-input"
+                    onChange={(e) => setAttachFile(e.target.files?.[0] || null)}
+                    style={{ padding: '6px' }}
+                    required
+                  />
+                </div>
+
+                <div className="admin-form-group">
+                  <label className="admin-form-label">Note / Description (Optional)</label>
+                  <textarea
+                    className="admin-textarea"
+                    rows={2}
+                    placeholder="e.g. Corrected scan, official stamped copy..."
+                    value={attachNote}
+                    onChange={(e) => setAttachNote(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div className="admin-modal-footer">
+                <button type="button" className="btn-admin-secondary" onClick={() => setAttachModalLine(null)}>
+                  Cancel
+                </button>
+                <button type="submit" className="btn-admin-primary" disabled={attachBusy}>
+                  {attachBusy ? 'Uploading…' : 'Upload File'}
                 </button>
               </div>
             </form>

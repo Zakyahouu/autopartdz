@@ -100,7 +100,11 @@ router.post('/:lineId/ship', uploadSingle('file'), async (req, res) => {
     const populated = await OrderDocumentLine.findById(line._id)
       .populate('documentTypeId', 'shortName fullName code')
       .populate('assignedChinaAccountId', 'name email role')
-      .populate('uploadedFiles', '_id filename contentType size uploadedAt');
+      .populate({
+        path: 'uploadedFiles',
+        select: '_id filename contentType size uploadedAt uploadedByUserId',
+        populate: { path: 'uploadedByUserId', select: '_id name email role' },
+      });
 
     return res.json({
       message: 'Document line marked as shipped.',
@@ -175,7 +179,11 @@ router.post('/:lineId/mark-printed', uploadSingle('file'), async (req, res) => {
 
     const populated = await OrderDocumentLine.findById(line._id)
       .populate('documentTypeId', 'shortName fullName code')
-      .populate('uploadedFiles', '_id filename contentType size uploadedAt');
+      .populate({
+        path: 'uploadedFiles',
+        select: '_id filename contentType size uploadedAt uploadedByUserId',
+        populate: { path: 'uploadedByUserId', select: '_id name email role' },
+      });
 
     return res.json({
       message: 'Document line marked as printed.',
@@ -243,6 +251,86 @@ router.patch('/:lineId/delay', async (req, res) => {
   } catch (err) {
     console.error('[PATCH /api/order-lines/:lineId/delay]', err);
     return res.status(500).json({ error: 'Server error updating line delay status.' });
+  }
+});
+
+// ── POST /api/order-lines/:lineId/files ───────────────────────────────────────
+// Attaches a file to a document line WITHOUT changing status
+// Accessible to Admin, or the assigned china_associate for their own line
+router.post('/:lineId/files', uploadSingle('file'), async (req, res) => {
+  try {
+    const { lineId } = req.params;
+    const { note } = req.body;
+
+    if (!mongoose.Types.ObjectId.isValid(lineId)) {
+      return res.status(400).json({ error: 'Invalid line ID.' });
+    }
+
+    if (!req.file) {
+      return res.status(400).json({ error: 'File is required.' });
+    }
+
+    const line = await OrderDocumentLine.findById(lineId);
+    if (!line) {
+      return res.status(404).json({ error: 'Document line not found.' });
+    }
+
+    // Ownership check (admin always passes; china_associate passes only if assigned)
+    if (!checkLineAccess(line, req.user)) {
+      return res.status(403).json({
+        error: 'Access denied: You are not authorized to upload files to this document line.',
+      });
+    }
+
+    const fileDoc = await File.create({
+      data: req.file.buffer,
+      contentType: req.file.mimetype,
+      filename: req.file.originalname,
+      size: req.file.size,
+      uploadedByUserId: req.user._id,
+    });
+
+    line.uploadedFiles.push(fileDoc._id);
+
+    line.activityLog.push({
+      timestamp: new Date(),
+      actorId: req.user._id,
+      actorRole: req.user.role,
+      action: 'file_added',
+      note: note?.trim() || `Uploaded document: ${req.file.originalname}`,
+      fileId: fileDoc._id,
+    });
+
+    await line.save();
+
+    const populated = await OrderDocumentLine.findById(line._id)
+      .populate('documentTypeId', 'shortName fullName code')
+      .populate('assignedChinaAccountId', 'name email role')
+      .populate({
+        path: 'uploadedFiles',
+        select: '_id filename contentType size uploadedAt uploadedByUserId',
+        populate: { path: 'uploadedByUserId', select: '_id name email role' },
+      });
+
+    return res.json({
+      message: 'File attached successfully.',
+      file: {
+        _id: fileDoc._id,
+        filename: fileDoc.filename,
+        contentType: fileDoc.contentType,
+        size: fileDoc.size,
+        uploadedAt: fileDoc.uploadedAt,
+        uploadedBy: {
+          _id: req.user._id,
+          name: req.user.name,
+          role: req.user.role,
+        },
+      },
+      line: populated,
+    });
+  } catch (err) {
+    console.error('[POST /api/order-lines/:lineId/files]', err);
+    return res.status(500).json({ error: 'Server error attaching file to document line.' });
   }
 });
 
