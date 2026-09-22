@@ -4,6 +4,7 @@ const Order = require('../models/Order');
 const OrderDocumentLine = require('../models/OrderDocumentLine');
 const DocumentType = require('../models/DocumentType');
 const CarCategory = require('../models/CarCategory');
+const User = require('../models/User');
 const { requireAuth, requireRole } = require('../middleware/auth');
 
 const router = express.Router();
@@ -96,6 +97,8 @@ router.get('/:id', async (req, res) => {
         path: 'documentTypeId',
         select: '_id shortName fullName code category defaultSource hasTranslation pricing active',
       })
+      .populate('assignedChinaAccountId', '_id name email role active')
+      .populate('uploadedFiles', '_id filename contentType size uploadedAt')
       .sort({ createdAt: 1 })
       .lean();
 
@@ -234,9 +237,10 @@ router.patch('/:id/confirm', async (req, res) => {
     }
 
     // 3. Update line sources or attributes if requested
+    // 3. Update line sources or attributes if requested
     if (Array.isArray(lineUpdates) && lineUpdates.length > 0) {
       for (const update of lineUpdates) {
-        const { lineId, source } = update || {};
+        const { lineId, source, assignedChinaAccountId, chinaAccountId } = update || {};
         if (lineId && mongoose.Types.ObjectId.isValid(lineId)) {
           const updateFields = {};
           if (source !== undefined) {
@@ -245,6 +249,23 @@ router.patch('/:id/confirm', async (req, res) => {
             }
             updateFields.source = source;
           }
+
+          const targetAccountId = assignedChinaAccountId !== undefined ? assignedChinaAccountId : chinaAccountId;
+          if (targetAccountId !== undefined) {
+            if (targetAccountId) {
+              if (!mongoose.Types.ObjectId.isValid(targetAccountId)) {
+                return res.status(400).json({ error: `Invalid China associate user ID: ${targetAccountId}` });
+              }
+              const associate = await User.findOne({ _id: targetAccountId, role: 'china_associate', active: true });
+              if (!associate) {
+                return res.status(400).json({ error: 'Target user is not an active China associate.' });
+              }
+              updateFields.assignedChinaAccountId = associate._id;
+            } else {
+              updateFields.assignedChinaAccountId = null;
+            }
+          }
+
           if (Object.keys(updateFields).length > 0) {
             await OrderDocumentLine.findOneAndUpdate(
               { _id: lineId, orderId: order._id },
@@ -278,6 +299,20 @@ router.patch('/:id/confirm', async (req, res) => {
       });
     }
 
+    // Check that EVERY china-source line has an assignedChinaAccountId
+    const chinaLinesMissingAssignee = remainingLines.filter(
+      (l) => l.source === 'china' && !l.assignedChinaAccountId
+    );
+    if (chinaLinesMissingAssignee.length > 0) {
+      const missingDetails = chinaLinesMissingAssignee.map(
+        (l) => l.documentTypeId?.shortName || l._id.toString()
+      );
+      return res.status(400).json({
+        error: `Cannot confirm order: All China-sourced document lines must be assigned to an active China associate. ${chinaLinesMissingAssignee.length} line(s) missing assignment: ${missingDetails.join(', ')}.`,
+        missingLineIds: chinaLinesMissingAssignee.map((l) => l._id),
+      });
+    }
+
     // 5. Transition order to 'confirmed'
     order.status = 'confirmed';
     order.confirmedBy = req.user._id;
@@ -286,6 +321,8 @@ router.patch('/:id/confirm', async (req, res) => {
 
     const fullyPopulatedLines = await OrderDocumentLine.find({ orderId: order._id })
       .populate('documentTypeId', 'shortName fullName code category defaultSource')
+      .populate('assignedChinaAccountId', '_id name email role active')
+      .populate('uploadedFiles', '_id filename contentType size uploadedAt')
       .lean();
 
     return res.json({
@@ -298,6 +335,52 @@ router.patch('/:id/confirm', async (req, res) => {
   } catch (err) {
     console.error('[PATCH /api/orders/:id/confirm]', err);
     return res.status(500).json({ error: 'Server error confirming order.' });
+  }
+});
+
+// ── PATCH /api/orders/:orderId/lines/:lineId/assign ───────────────────────────
+// Admin-only: Assigns a China associate to a specific document line
+router.patch('/:orderId/lines/:lineId/assign', async (req, res) => {
+  try {
+    const { orderId, lineId } = req.params;
+    const { chinaAccountId, assignedChinaAccountId } = req.body;
+    const targetId = chinaAccountId !== undefined ? chinaAccountId : assignedChinaAccountId;
+
+    if (!mongoose.Types.ObjectId.isValid(orderId) || !mongoose.Types.ObjectId.isValid(lineId)) {
+      return res.status(400).json({ error: 'Invalid order ID or line ID.' });
+    }
+
+    let assigneeId = null;
+    if (targetId) {
+      if (!mongoose.Types.ObjectId.isValid(targetId)) {
+        return res.status(400).json({ error: 'Invalid China associate ID.' });
+      }
+      const associate = await User.findOne({ _id: targetId, role: 'china_associate', active: true });
+      if (!associate) {
+        return res.status(400).json({ error: 'Target user is not an active China associate.' });
+      }
+      assigneeId = associate._id;
+    }
+
+    const line = await OrderDocumentLine.findOneAndUpdate(
+      { _id: lineId, orderId },
+      { $set: { assignedChinaAccountId: assigneeId } },
+      { new: true }
+    )
+      .populate('documentTypeId', 'shortName fullName code category defaultSource')
+      .populate('assignedChinaAccountId', '_id name email role active');
+
+    if (!line) {
+      return res.status(404).json({ error: 'Order document line not found.' });
+    }
+
+    return res.json({
+      message: 'Line assignment updated successfully.',
+      line,
+    });
+  } catch (err) {
+    console.error('[PATCH /api/orders/:orderId/lines/:lineId/assign]', err);
+    return res.status(500).json({ error: 'Server error updating line assignment.' });
   }
 });
 

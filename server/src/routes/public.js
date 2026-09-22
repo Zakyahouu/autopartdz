@@ -533,4 +533,121 @@ router.post('/orders/correction', async (req, res) => {
   }
 });
 
+// ── Helper Status Mappers for Public Tracking ────────────────────────────────
+function mapLineStatusToClient(status) {
+  switch (status) {
+    case 'needed':
+      return 'needed';
+    case 'sent_to_china':
+    case 'shipped':
+    case 'pending_admin_review':
+    case 'needs_correction':
+      return 'in_progress';
+    case 'printed':
+    case 'arrived_at_office':
+    case 'packaged':
+      return 'ready';
+    case 'sent_to_client':
+    case 'delivered':
+      return 'delivered';
+    default:
+      return 'in_progress';
+  }
+}
+
+function mapOrderStatusToClient(status) {
+  switch (status) {
+    case 'pending':
+      return 'pending';
+    case 'confirmed':
+    case 'in_progress':
+      return 'in_progress';
+    case 'ready_for_dispatch':
+    case 'packaged':
+      return 'ready';
+    case 'sent_to_client':
+    case 'delivered':
+      return 'delivered';
+    case 'cancelled':
+      return 'cancelled';
+    default:
+      return 'in_progress';
+  }
+}
+
+// ── GET /api/public/orders/track ───────────────────────────────────────────────
+// Public tracking lookup: requires trackingCode + (phone OR vin)
+// No status restriction. Strict allowlist: never leaks prices, logs, tracking codes, or internal statuses!
+router.get('/orders/track', async (req, res) => {
+  try {
+    const { trackingCode, phone, vin } = req.query;
+    const locale = (req.query.locale || 'en').toLowerCase();
+
+    if (!trackingCode?.trim()) {
+      return res.status(400).json({ error: 'Tracking code is required.' });
+    }
+
+    const cleanPhone = phone?.trim();
+    const cleanVin = vin?.trim().toUpperCase();
+
+    if (!cleanPhone && !cleanVin) {
+      return res.status(400).json({
+        error: 'Verification required: provide either phone number or VIN along with tracking code.',
+      });
+    }
+
+    const conditions = [{ trackingCode: trackingCode.trim().toUpperCase() }];
+    const matchConditions = [];
+    if (cleanPhone) matchConditions.push({ phone: cleanPhone });
+    if (cleanVin) matchConditions.push({ vin: cleanVin });
+
+    conditions.push({ $or: matchConditions });
+
+    // Note: NO status restriction here (unlike correction lookup)
+    const order = await Order.findOne({ $and: conditions }).lean();
+
+    if (!order) {
+      return res.status(404).json({
+        error: 'No matching order found. Please check your tracking code and phone number / VIN.',
+      });
+    }
+
+    // Fetch lines for this order
+    const lines = await OrderDocumentLine.find({ orderId: order._id })
+      .populate({
+        path: 'documentTypeId',
+        select: '_id shortName fullName translations',
+      })
+      .lean();
+
+    // STRICT ALLOWLIST: ONLY documentType fullName, status, isDelayed!
+    // NEVER leak clientPrice, costPrice, activityLog, shippingTrackingCode, assignedChinaAccountId, or files!
+    const sanitizedLines = lines.map((line) => {
+      const doc = line.documentTypeId || {};
+      const resolvedName =
+        resolveDocField(doc, 'fullName', locale) ||
+        doc.shortName ||
+        'Document';
+
+      return {
+        documentType: {
+          fullName: resolvedName,
+        },
+        status: mapLineStatusToClient(line.status),
+        isDelayed: Boolean(line.isDelayed),
+      };
+    });
+
+    return res.json({
+      orderStatus: mapOrderStatusToClient(order.status),
+      orderType: order.orderType,
+      lines: sanitizedLines,
+    });
+  } catch (err) {
+    console.error('[GET /api/public/orders/track]', err);
+    return res.status(500).json({ error: 'Server error looking up order tracking.' });
+  }
+});
+
 module.exports = router;
+

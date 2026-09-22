@@ -15,6 +15,12 @@ import {
   RotateCcw,
   X,
   ExternalLink,
+  Send,
+  Printer,
+  Upload,
+  Copy,
+  Check,
+  RefreshCw,
 } from 'lucide-react';
 
 export default function OrderDetailPage() {
@@ -28,6 +34,32 @@ export default function OrderDetailPage() {
 
   // Line source changes: map of lineId -> source ('local' | 'china')
   const [lineSources, setLineSources] = useState({});
+  // China Associates list
+  const [chinaAssociates, setChinaAssociates] = useState([]);
+  // Line assignees: map of lineId -> userId
+  const [lineAssignees, setLineAssignees] = useState({});
+
+  // Proxy progression modals
+  const [proxyShipLine, setProxyShipLine] = useState(null);
+  const [proxyShipTrackingCode, setProxyShipTrackingCode] = useState('');
+  const [proxyShipNote, setProxyShipNote] = useState('');
+  const [proxyShipFile, setProxyShipFile] = useState(null);
+  const [proxyShipBusy, setProxyShipBusy] = useState(false);
+  const [proxyShipError, setProxyShipError] = useState('');
+
+  const [proxyPrintLine, setProxyPrintLine] = useState(null);
+  const [proxyPrintNote, setProxyPrintNote] = useState('');
+  const [proxyPrintFile, setProxyPrintFile] = useState(null);
+  const [proxyPrintBusy, setProxyPrintBusy] = useState(false);
+  const [proxyPrintError, setProxyPrintError] = useState('');
+
+  const [proxyDelayLine, setProxyDelayLine] = useState(null);
+  const [proxyDelayIsDelayed, setProxyDelayIsDelayed] = useState(false);
+  const [proxyDelayNote, setProxyDelayNote] = useState('');
+  const [proxyDelayBusy, setProxyDelayBusy] = useState(false);
+  const [proxyDelayError, setProxyDelayError] = useState('');
+
+  const [copiedTracking, setCopiedTracking] = useState('');
 
   // Add line modal
   const [addModalOpen, setAddModalOpen] = useState(false);
@@ -44,12 +76,15 @@ export default function OrderDetailPage() {
     const { ok, data } = await apiFetch(`/orders/${id}`);
     if (ok && data) {
       setOrder(data);
-      // Initialize line sources
+      // Initialize line sources & assignees
       const sources = {};
+      const assignees = {};
       (data.lines || []).forEach((l) => {
         sources[l._id] = l.source;
+        assignees[l._id] = l.assignedChinaAccountId?._id || l.assignedChinaAccountId || '';
       });
       setLineSources(sources);
+      setLineAssignees(assignees);
     } else {
       setError(data?.error || 'Failed to load order details.');
     }
@@ -63,9 +98,17 @@ export default function OrderDetailPage() {
     }
   };
 
+  const loadChinaAssociates = async () => {
+    const { ok, data } = await apiFetch('/users?role=china_associate&active=true');
+    if (ok && Array.isArray(data)) {
+      setChinaAssociates(data);
+    }
+  };
+
   useEffect(() => {
     loadOrderDetail();
     loadCatalog();
+    loadChinaAssociates();
   }, [id]);
 
   const handleSourceChange = (lineId, newSource) => {
@@ -73,6 +116,26 @@ export default function OrderDetailPage() {
       ...prev,
       [lineId]: newSource === '' ? null : newSource,
     }));
+  };
+
+  const handleAssigneeChange = async (lineId, newAssigneeId) => {
+    setLineAssignees((prev) => ({
+      ...prev,
+      [lineId]: newAssigneeId,
+    }));
+
+    // If order is already confirmed, persist assignment immediately via PATCH /orders/:id/lines/:lineId/assign
+    if (order && order.status !== 'pending') {
+      const res = await apiFetch(`/orders/${id}/lines/${lineId}/assign`, {
+        method: 'PATCH',
+        body: JSON.stringify({ chinaAccountId: newAssigneeId || null }),
+      });
+      if (res.ok) {
+        loadOrderDetail();
+      } else {
+        alert(res.data?.error || 'Failed to update line assignment.');
+      }
+    }
   };
 
   const handleRemoveLine = async (lineId) => {
@@ -134,11 +197,24 @@ export default function OrderDetailPage() {
       return;
     }
 
+    // Part B rule: A china-source line cannot be left unassigned once source = 'china' is set
+    const missingAssignees = currentLines.filter(
+      (l) => lineSources[l._id] === 'china' && !lineAssignees[l._id]
+    );
+
+    if (missingAssignees.length > 0) {
+      alert(
+        `Cannot confirm order: All China-sourced document lines must be assigned to an active China associate. ${missingAssignees.length} line(s) missing assignment.`
+      );
+      return;
+    }
+
     setActionLoading(true);
-    // Submit all updated sources and trigger confirmation
+    // Submit all updated sources and assignees, triggering confirmation
     const lineUpdates = Object.entries(lineSources).map(([lineId, source]) => ({
       lineId,
       source,
+      assignedChinaAccountId: source === 'china' ? lineAssignees[lineId] || null : null,
     }));
 
     const res = await apiFetch(`/orders/${id}/confirm`, {
@@ -154,6 +230,103 @@ export default function OrderDetailPage() {
     } else {
       alert(res.data?.error || 'Failed to confirm order.');
     }
+  };
+
+  // Proxy ship submit
+  const handleProxyShipSubmit = async (e) => {
+    e.preventDefault();
+    if (!proxyShipTrackingCode.trim()) {
+      setProxyShipError('Shipping tracking code is required.');
+      return;
+    }
+    setProxyShipBusy(true);
+    setProxyShipError('');
+    try {
+      const formData = new FormData();
+      formData.append('shippingTrackingCode', proxyShipTrackingCode.trim());
+      if (proxyShipNote.trim()) formData.append('note', proxyShipNote.trim());
+      if (proxyShipFile) formData.append('file', proxyShipFile);
+
+      const token = localStorage.getItem('autopartdz_token');
+      const res = await fetch(`/api/order-lines/${proxyShipLine._id}/ship`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to mark line as shipped');
+
+      setProxyShipLine(null);
+      setProxyShipTrackingCode('');
+      setProxyShipNote('');
+      setProxyShipFile(null);
+      loadOrderDetail();
+    } catch (err) {
+      setProxyShipError(err.message);
+    } finally {
+      setProxyShipBusy(false);
+    }
+  };
+
+  // Proxy print submit
+  const handleProxyPrintSubmit = async (e) => {
+    e.preventDefault();
+    setProxyPrintBusy(true);
+    setProxyPrintError('');
+    try {
+      const formData = new FormData();
+      if (proxyPrintNote.trim()) formData.append('note', proxyPrintNote.trim());
+      if (proxyPrintFile) formData.append('file', proxyPrintFile);
+
+      const token = localStorage.getItem('autopartdz_token');
+      const res = await fetch(`/api/order-lines/${proxyPrintLine._id}/mark-printed`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to mark line as printed');
+
+      setProxyPrintLine(null);
+      setProxyPrintNote('');
+      setProxyPrintFile(null);
+      loadOrderDetail();
+    } catch (err) {
+      setProxyPrintError(err.message);
+    } finally {
+      setProxyPrintBusy(false);
+    }
+  };
+
+  // Proxy delay submit
+  const handleProxyDelaySubmit = async (e) => {
+    e.preventDefault();
+    setProxyDelayBusy(true);
+    setProxyDelayError('');
+    try {
+      const { ok, data } = await apiFetch(`/order-lines/${proxyDelayLine._id}/delay`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          isDelayed: proxyDelayIsDelayed,
+          note: proxyDelayNote.trim(),
+        }),
+      });
+      if (!ok) throw new Error(data?.error || 'Failed to update delay status');
+
+      setProxyDelayLine(null);
+      setProxyDelayNote('');
+      loadOrderDetail();
+    } catch (err) {
+      setProxyDelayError(err.message);
+    } finally {
+      setProxyDelayBusy(false);
+    }
+  };
+
+  const handleCopyTracking = (code) => {
+    navigator.clipboard.writeText(code);
+    setCopiedTracking(code);
+    setTimeout(() => setCopiedTracking(''), 2000);
   };
 
   const handleDeleteOrder = async () => {
@@ -405,18 +578,18 @@ export default function OrderDetailPage() {
           <thead>
             <tr>
               <th>Document</th>
-              <th style={{ width: 180 }}>Translation Mode</th>
-              <th className="align-right" style={{ width: 120 }}>Client Fee</th>
-              <th className="align-right" style={{ width: 120 }}>Cost Price</th>
-              <th style={{ width: 180 }}>Fulfillment Source</th>
+              <th style={{ width: 170 }}>Translation Mode</th>
+              <th className="align-right" style={{ width: 110 }}>Client Fee</th>
+              <th className="align-right" style={{ width: 110 }}>Cost Price</th>
+              <th style={{ width: 220 }}>Fulfillment & Assignee</th>
               <th className="align-center" style={{ width: 100 }}>Status</th>
-              {isPending && <th className="align-right" style={{ width: 60 }}>Action</th>}
+              <th className="align-right" style={{ width: 130 }}>Actions</th>
             </tr>
           </thead>
           <tbody>
             {lines.length === 0 ? (
               <tr>
-                <td colSpan={isPending ? 7 : 6} className="admin-table-empty">
+                <td colSpan={7} className="admin-table-empty">
                   No document lines on this order.
                 </td>
               </tr>
@@ -424,6 +597,8 @@ export default function OrderDetailPage() {
               lines.map((line) => {
                 const currentSource = lineSources[line._id];
                 const isSourceUnset = !currentSource;
+                const currentAssignee = lineAssignees[line._id];
+                const isChinaWithoutAssignee = currentSource === 'china' && !currentAssignee;
 
                 return (
                   <tr key={line._id}>
@@ -463,36 +638,105 @@ export default function OrderDetailPage() {
 
                     <td>
                       {isPending ? (
-                        <select
-                          className="admin-select"
-                          value={currentSource || ''}
-                          onChange={(e) => handleSourceChange(line._id, e.target.value)}
-                          style={{
-                            fontSize: 12,
-                            height: 32,
-                            borderColor: isSourceUnset ? 'var(--admin-accent)' : undefined,
-                            background: isSourceUnset ? 'rgba(168, 35, 27, 0.05)' : undefined,
-                          }}
-                        >
-                          <option value="">— Select Source (Required) —</option>
-                          <option value="local">Local (Algeria Print)</option>
-                          <option value="china">China (Shipped)</option>
-                        </select>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                          <select
+                            className="admin-select"
+                            value={currentSource || ''}
+                            onChange={(e) => handleSourceChange(line._id, e.target.value)}
+                            style={{
+                              fontSize: 12,
+                              height: 32,
+                              borderColor: isSourceUnset ? 'var(--admin-accent)' : undefined,
+                              background: isSourceUnset ? 'rgba(168, 35, 27, 0.05)' : undefined,
+                            }}
+                          >
+                            <option value="">— Select Source (Required) —</option>
+                            <option value="local">Local (Algeria Print)</option>
+                            <option value="china">China (Shipped)</option>
+                          </select>
+
+                          {currentSource === 'china' && (
+                            <select
+                              className="admin-select"
+                              value={currentAssignee || ''}
+                              onChange={(e) => handleAssigneeChange(line._id, e.target.value)}
+                              style={{
+                                fontSize: 11.5,
+                                height: 30,
+                                borderColor: isChinaWithoutAssignee ? '#f59e0b' : undefined,
+                                background: isChinaWithoutAssignee ? 'rgba(245, 158, 11, 0.08)' : undefined,
+                              }}
+                            >
+                              <option value="">— Assign China Associate (Required) —</option>
+                              {chinaAssociates.map((u) => (
+                                <option key={u._id} value={u._id}>
+                                  {u.name} ({u.email})
+                                </option>
+                              ))}
+                            </select>
+                          )}
+                        </div>
                       ) : (
-                        <span className={`admin-badge ${line.source === 'local' ? 'is-active' : ''}`}>
-                          {line.source === 'local' ? 'Local Print' : 'China Shipped'}
-                        </span>
+                        <div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                            <span className={`admin-badge ${line.source === 'local' ? 'is-active' : ''}`}>
+                              {line.source === 'local' ? 'Local Print' : 'China Shipped'}
+                            </span>
+                            {line.source === 'china' && (
+                              <span
+                                className="admin-doc-chip"
+                                style={{
+                                  fontSize: 11,
+                                  background: line.assignedChinaAccountId ? '#f1f5f9' : '#fef3c7',
+                                  color: line.assignedChinaAccountId ? '#334155' : '#b45309',
+                                }}
+                              >
+                                {line.assignedChinaAccountId?.name ? line.assignedChinaAccountId.name : 'Unassigned'}
+                              </span>
+                            )}
+                          </div>
+                          {line.shippingTrackingCode && (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 4, fontSize: 11, fontFamily: 'var(--font-mono)' }}>
+                              <span style={{ color: 'var(--admin-text-secondary)' }}>Tracking:</span>
+                              <span style={{ fontWeight: 600 }}>{line.shippingTrackingCode}</span>
+                              <button
+                                type="button"
+                                onClick={() => handleCopyTracking(line.shippingTrackingCode)}
+                                title="Copy tracking code"
+                                style={{ border: 'none', background: 'transparent', cursor: 'pointer', padding: 1 }}
+                              >
+                                {copiedTracking === line.shippingTrackingCode ? <Check size={11} color="#16a34a" /> : <Copy size={11} />}
+                              </button>
+                            </div>
+                          )}
+                        </div>
                       )}
                     </td>
 
                     <td className="align-center">
-                      <span className="admin-status">
-                        <span>{line.status}</span>
-                      </span>
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+                        <span className="admin-status">
+                          <span>{line.status}</span>
+                        </span>
+                        {line.isDelayed && (
+                          <span
+                            style={{
+                              fontSize: 10,
+                              fontWeight: 700,
+                              padding: '1px 5px',
+                              borderRadius: 4,
+                              backgroundColor: 'rgba(239, 68, 68, 0.15)',
+                              color: '#dc2626',
+                            }}
+                          >
+                            DELAYED
+                          </span>
+                        )}
+                      </div>
                     </td>
 
-                    {isPending && (
-                      <td className="align-right">
+                    <td className="align-right">
+                      {isPending ? (
                         <button
                           type="button"
                           className="btn-admin-icon danger"
@@ -502,8 +746,80 @@ export default function OrderDetailPage() {
                         >
                           <Trash2 size={13} />
                         </button>
-                      </td>
-                    )}
+                      ) : (
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6, flexWrap: 'wrap' }}>
+                          {/* Admin Proxy Sourcing / Printing / Delay Actions */}
+                          {line.source === 'china' && ['needed', 'sent_to_china'].includes(line.status) && (
+                            <button
+                              type="button"
+                              className="btn-admin-secondary"
+                              onClick={() => {
+                                setProxyShipLine(line);
+                                setProxyShipTrackingCode('');
+                                setProxyShipNote('');
+                                setProxyShipFile(null);
+                                setProxyShipError('');
+                              }}
+                              style={{ padding: '4px 8px', fontSize: 11, display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                              title="Ship on behalf of China (Proxy)"
+                            >
+                              <Send size={11} />
+                              <span>Ship</span>
+                            </button>
+                          )}
+
+                          {line.source === 'china' && line.status === 'shipped' && (
+                            <button
+                              type="button"
+                              className="btn-admin-secondary"
+                              onClick={() => {
+                                setProxyDelayLine(line);
+                                setProxyDelayIsDelayed(!line.isDelayed);
+                                setProxyDelayNote('');
+                                setProxyDelayError('');
+                              }}
+                              style={{
+                                padding: '4px 8px',
+                                fontSize: 11,
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: 4,
+                                borderColor: line.isDelayed ? '#16a34a' : '#f59e0b',
+                                color: line.isDelayed ? '#16a34a' : '#b45309',
+                              }}
+                              title="Toggle transit delay flag"
+                            >
+                              <AlertTriangle size={11} />
+                              <span>{line.isDelayed ? 'Clear Delay' : 'Flag Delay'}</span>
+                            </button>
+                          )}
+
+                          {line.source === 'local' && line.status === 'needed' && (
+                            <button
+                              type="button"
+                              className="btn-admin-secondary"
+                              onClick={() => {
+                                setProxyPrintLine(line);
+                                setProxyPrintNote('');
+                                setProxyPrintFile(null);
+                                setProxyPrintError('');
+                              }}
+                              style={{ padding: '4px 8px', fontSize: 11, display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                              title="Mark document printed locally"
+                            >
+                              <Printer size={11} />
+                              <span>Mark Printed</span>
+                            </button>
+                          )}
+
+                          {line.source === 'local' && line.status === 'printed' && (
+                            <span style={{ fontSize: 11, color: '#16a34a', fontWeight: 600 }}>
+                              ✓ Printed
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </td>
                   </tr>
                 );
               })
@@ -613,6 +929,207 @@ export default function OrderDetailPage() {
                 Delete Order
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Proxy Ship Document Modal (Admin Fallback) */}
+      {proxyShipLine && (
+        <div className="admin-modal-backdrop" onClick={(e) => { if (e.target === e.currentTarget) setProxyShipLine(null); }}>
+          <div className="admin-modal-panel" role="dialog" aria-modal="true" style={{ width: 480 }}>
+            <div className="admin-modal-header">
+              <h2 className="admin-modal-title">Ship Line on Behalf of China</h2>
+              <button type="button" className="btn-admin-icon" onClick={() => setProxyShipLine(null)}>
+                <X size={16} />
+              </button>
+            </div>
+
+            <form onSubmit={handleProxyShipSubmit}>
+              <div className="admin-modal-body">
+                <div style={{ fontSize: 13, color: 'var(--admin-text-secondary)', marginBottom: 16 }}>
+                  Recording shipment for <strong>{proxyShipLine.documentTypeId?.fullName || 'Document'}</strong> (WhatsApp/WeChat Proxy Fallback).
+                </div>
+
+                {proxyShipError && (
+                  <div className="admin-alert admin-alert-error" style={{ marginBottom: 12 }}>
+                    <AlertTriangle size={14} />
+                    <span>{proxyShipError}</span>
+                  </div>
+                )}
+
+                <div className="admin-form-group">
+                  <label className="admin-form-label">
+                    Courier Tracking Code <span className="required">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    className="admin-input"
+                    placeholder="e.g. SF-EXPRESS-998877, DHL-123456"
+                    value={proxyShipTrackingCode}
+                    onChange={(e) => setProxyShipTrackingCode(e.target.value)}
+                    required
+                  />
+                </div>
+
+                <div className="admin-form-group">
+                  <label className="admin-form-label">
+                    Upload Waybill / Airway Scan (Optional, max 12MB)
+                  </label>
+                  <input
+                    type="file"
+                    className="admin-input"
+                    onChange={(e) => setProxyShipFile(e.target.files?.[0] || null)}
+                    style={{ padding: '6px' }}
+                  />
+                </div>
+
+                <div className="admin-form-group">
+                  <label className="admin-form-label">Internal Note (Optional)</label>
+                  <textarea
+                    className="admin-textarea"
+                    rows={2}
+                    placeholder="e.g. Tracking code confirmed via associate chat..."
+                    value={proxyShipNote}
+                    onChange={(e) => setProxyShipNote(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div className="admin-modal-footer">
+                <button type="button" className="btn-admin-secondary" onClick={() => setProxyShipLine(null)}>
+                  Cancel
+                </button>
+                <button type="submit" className="btn-admin-primary" disabled={proxyShipBusy}>
+                  {proxyShipBusy ? 'Saving…' : 'Record Shipment'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Proxy Print Local Document Modal */}
+      {proxyPrintLine && (
+        <div className="admin-modal-backdrop" onClick={(e) => { if (e.target === e.currentTarget) setProxyPrintLine(null); }}>
+          <div className="admin-modal-panel" role="dialog" aria-modal="true" style={{ width: 480 }}>
+            <div className="admin-modal-header">
+              <h2 className="admin-modal-title">Mark Local Document Printed</h2>
+              <button type="button" className="btn-admin-icon" onClick={() => setProxyPrintLine(null)}>
+                <X size={16} />
+              </button>
+            </div>
+
+            <form onSubmit={handleProxyPrintSubmit}>
+              <div className="admin-modal-body">
+                <div style={{ fontSize: 13, color: 'var(--admin-text-secondary)', marginBottom: 16 }}>
+                  Marking <strong>{proxyPrintLine.documentTypeId?.fullName || 'Document'}</strong> as printed and ready locally.
+                </div>
+
+                {proxyPrintError && (
+                  <div className="admin-alert admin-alert-error" style={{ marginBottom: 12 }}>
+                    <AlertTriangle size={14} />
+                    <span>{proxyPrintError}</span>
+                  </div>
+                )}
+
+                <div className="admin-form-group">
+                  <label className="admin-form-label">
+                    Upload Scanned Print / Proof (Optional, max 12MB)
+                  </label>
+                  <input
+                    type="file"
+                    className="admin-input"
+                    onChange={(e) => setProxyPrintFile(e.target.files?.[0] || null)}
+                    style={{ padding: '6px' }}
+                  />
+                </div>
+
+                <div className="admin-form-group">
+                  <label className="admin-form-label">Office Note (Optional)</label>
+                  <textarea
+                    className="admin-textarea"
+                    rows={2}
+                    placeholder="e.g. Printed at main agency desk..."
+                    value={proxyPrintNote}
+                    onChange={(e) => setProxyPrintNote(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div className="admin-modal-footer">
+                <button type="button" className="btn-admin-secondary" onClick={() => setProxyPrintLine(null)}>
+                  Cancel
+                </button>
+                <button type="submit" className="btn-admin-primary" disabled={proxyPrintBusy}>
+                  {proxyPrintBusy ? 'Saving…' : 'Mark Printed'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Proxy Delay Toggle Modal */}
+      {proxyDelayLine && (
+        <div className="admin-modal-backdrop" onClick={(e) => { if (e.target === e.currentTarget) setProxyDelayLine(null); }}>
+          <div className="admin-modal-panel" role="dialog" aria-modal="true" style={{ width: 460 }}>
+            <div className="admin-modal-header">
+              <h2 className="admin-modal-title">
+                {proxyDelayIsDelayed ? 'Flag Document Transit Delay' : 'Clear Transit Delay'}
+              </h2>
+              <button type="button" className="btn-admin-icon" onClick={() => setProxyDelayLine(null)}>
+                <X size={16} />
+              </button>
+            </div>
+
+            <form onSubmit={handleProxyDelaySubmit}>
+              <div className="admin-modal-body">
+                <div style={{ fontSize: 13, color: 'var(--admin-text-secondary)', marginBottom: 16 }}>
+                  {proxyDelayIsDelayed ? (
+                    <span>
+                      Flagging this line as <strong>Delayed</strong> will show an amber warning on the public tracking portal to notify the importer.
+                    </span>
+                  ) : (
+                    <span>Clearing the delay flag indicates transit has normalized.</span>
+                  )}
+                </div>
+
+                {proxyDelayError && (
+                  <div className="admin-alert admin-alert-error" style={{ marginBottom: 12 }}>
+                    <AlertTriangle size={14} />
+                    <span>{proxyDelayError}</span>
+                  </div>
+                )}
+
+                <div className="admin-form-group">
+                  <label className="admin-form-label">Delay Reason / Note (Optional)</label>
+                  <textarea
+                    className="admin-textarea"
+                    rows={2}
+                    placeholder="e.g. Customs inspection flight backlog in Dubai..."
+                    value={proxyDelayNote}
+                    onChange={(e) => setProxyDelayNote(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div className="admin-modal-footer">
+                <button type="button" className="btn-admin-secondary" onClick={() => setProxyDelayLine(null)}>
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="btn-admin-primary"
+                  disabled={proxyDelayBusy}
+                  style={{
+                    backgroundColor: proxyDelayIsDelayed ? '#dc2626' : '#16a34a',
+                    borderColor: proxyDelayIsDelayed ? '#dc2626' : '#16a34a',
+                  }}
+                >
+                  {proxyDelayBusy ? 'Saving…' : proxyDelayIsDelayed ? 'Confirm Delay Flag' : 'Clear Delay Flag'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

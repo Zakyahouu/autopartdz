@@ -9,6 +9,8 @@ const carCategoriesRoutes = require('./routes/carCategories');
 const filesRoutes = require('./routes/files');
 const publicRoutes = require('./routes/public');
 const ordersRoutes = require('./routes/orders');
+const orderLinesRoutes = require('./routes/orderLines');
+const chinaRoutes = require('./routes/china');
 
 const app = express();
 
@@ -35,6 +37,8 @@ app.use('/api/car-categories', carCategoriesRoutes);
 app.use('/api/files', filesRoutes);
 app.use('/api/public', publicRoutes);
 app.use('/api/orders', ordersRoutes);
+app.use('/api/order-lines', orderLinesRoutes);
+app.use('/api/china', chinaRoutes);
 
 // ── 404 catch-all ────────────────────────────────────────────────────────────
 app.use((req, res) => {

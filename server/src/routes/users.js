@@ -66,7 +66,15 @@ router.post('/', async (req, res) => {
  */
 router.get('/', async (req, res) => {
   try {
-    const users = await User.find()
+    const filter = {};
+    if (req.query.role) {
+      filter.role = req.query.role;
+    }
+    if (req.query.active !== undefined) {
+      filter.active = req.query.active === 'true';
+    }
+
+    const users = await User.find(filter)
       .select('-passwordHash')
       .populate('createdBy', 'name email')
       .sort({ createdAt: -1 });

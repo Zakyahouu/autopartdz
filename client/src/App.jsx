@@ -6,6 +6,8 @@ import CatalogPage from './pages/CatalogPage';
 import OrdersQueuePage from './pages/OrdersQueuePage';
 import OrderDetailPage from './pages/OrderDetailPage';
 import ClientPortalPage from './pages/ClientPortalPage';
+import PublicTrackingPage from './pages/PublicTrackingPage';
+import ChinaPortalPage from './pages/ChinaPortalPage';
 
 export default function App() {
   return (
@@ -14,6 +16,10 @@ export default function App() {
         <Routes>
           {/* Public Client Clearance Portal (Moment Tier) */}
           <Route path="/" element={<ClientPortalPage />} />
+          <Route path="/track" element={<PublicTrackingPage />} />
+
+          {/* China Associate Portal */}
+          <Route path="/china" element={<ChinaPortalPage />} />
 
           {/* Public login page */}
           <Route path="/login" element={<LoginPage />} />
