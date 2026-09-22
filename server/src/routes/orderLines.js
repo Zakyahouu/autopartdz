@@ -47,6 +47,13 @@ router.post('/:lineId/ship', uploadSingle('file'), async (req, res) => {
       return res.status(404).json({ error: 'Document line not found.' });
     }
 
+    // Source validation: only china-sourced lines can be shipped
+    if (line.source !== 'china') {
+      return res.status(400).json({
+        error: 'Only china-sourced lines can be shipped.',
+      });
+    }
+
     // Ownership check
     if (!checkLineAccess(line, req.user)) {
       return res.status(403).json({
@@ -121,16 +128,17 @@ router.post('/:lineId/mark-printed', uploadSingle('file'), async (req, res) => {
       return res.status(404).json({ error: 'Document line not found.' });
     }
 
+    // Source validation: only local-sourced lines can be marked printed
+    if (line.source !== 'local') {
+      return res.status(400).json({
+        error: 'Only local-sourced lines can be marked printed.',
+      });
+    }
+
     // Ownership check (admin can print any local line; china_associate cannot print local lines)
     if (!checkLineAccess(line, req.user)) {
       return res.status(403).json({
         error: 'Access denied: You are not authorized to mark this document line printed.',
-      });
-    }
-
-    if (line.source !== 'local') {
-      return res.status(400).json({
-        error: `Only local-sourced lines can be marked printed. Current source: "${line.source}".`,
       });
     }
 

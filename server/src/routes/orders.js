@@ -350,6 +350,17 @@ router.patch('/:orderId/lines/:lineId/assign', async (req, res) => {
       return res.status(400).json({ error: 'Invalid order ID or line ID.' });
     }
 
+    const line = await OrderDocumentLine.findOne({ _id: lineId, orderId });
+    if (!line) {
+      return res.status(404).json({ error: 'Order document line not found.' });
+    }
+
+    if (line.source !== 'china') {
+      return res.status(400).json({
+        error: 'Only china-sourced lines can be assigned to a China associate.',
+      });
+    }
+
     let assigneeId = null;
     if (targetId) {
       if (!mongoose.Types.ObjectId.isValid(targetId)) {
@@ -362,21 +373,16 @@ router.patch('/:orderId/lines/:lineId/assign', async (req, res) => {
       assigneeId = associate._id;
     }
 
-    const line = await OrderDocumentLine.findOneAndUpdate(
-      { _id: lineId, orderId },
-      { $set: { assignedChinaAccountId: assigneeId } },
-      { new: true }
-    )
+    line.assignedChinaAccountId = assigneeId;
+    await line.save();
+
+    const populated = await OrderDocumentLine.findById(line._id)
       .populate('documentTypeId', 'shortName fullName code category defaultSource')
       .populate('assignedChinaAccountId', '_id name email role active');
 
-    if (!line) {
-      return res.status(404).json({ error: 'Order document line not found.' });
-    }
-
     return res.json({
       message: 'Line assignment updated successfully.',
-      line,
+      line: populated,
     });
   } catch (err) {
     console.error('[PATCH /api/orders/:orderId/lines/:lineId/assign]', err);
