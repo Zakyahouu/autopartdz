@@ -330,11 +330,13 @@ router.post('/orders/correction/lookup', async (req, res) => {
     if (cleanVin) matchConditions.push({ vin: cleanVin });
 
     conditions.push({ $or: matchConditions });
+    // Status gate: only orders whose status is NOT 'pending' and NOT 'cancelled' can be looked up for correction
+    conditions.push({ status: { $nin: ['pending', 'cancelled'] } });
 
     const order = await Order.findOne({ $and: conditions }).lean();
 
     if (!order) {
-      // Generic 404 — does not reveal whether tracking code or phone/vin was mismatched
+      // Generic 404 — does not reveal whether tracking code or phone/vin was mismatched or ineligible status
       return res.status(404).json({
         error: 'No matching order found. Please check your tracking code and phone number / VIN.',
       });
@@ -398,8 +400,8 @@ router.post('/orders/correction', async (req, res) => {
     }
 
     const originalOrder = await Order.findById(originalOrderId);
-    if (!originalOrder) {
-      return res.status(404).json({ error: 'Original order not found.' });
+    if (!originalOrder || ['pending', 'cancelled'].includes(originalOrder.status)) {
+      return res.status(404).json({ error: 'Original order not found or is ineligible for correction.' });
     }
 
     if (!Array.isArray(corrections) || corrections.length === 0) {

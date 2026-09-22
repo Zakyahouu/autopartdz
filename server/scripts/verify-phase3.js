@@ -204,8 +204,8 @@ async function main() {
     throw new Error(`Expected 404, got ${lookupWrongRes.status}`);
   }
 
-  // C. Valid lookup with trackingCode + valid phone
-  const lookupValidRes = await fetch(`${BASE_URL}/public/orders/correction/lookup?locale=fr`, {
+  // C. Lookup with valid credentials against pending order -> must return 404 (status gate)
+  const lookupPendingRes = await fetch(`${BASE_URL}/public/orders/correction/lookup?locale=fr`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -213,9 +213,47 @@ async function main() {
       phone: '0555123456',
     }),
   });
+  const lookupPendingBody = await lookupPendingRes.json();
+  if (lookupPendingRes.status === 404) {
+    console.log(`✓ PASS: Pending order rejected with generic 404 per status gate rule.`);
+  } else {
+    throw new Error(`Expected 404 for pending order, got ${lookupPendingRes.status}`);
+  }
+
+  // D. Valid lookup with trackingCode + valid phone against confirmed order
+  const confirmedTrackingCode = await generateUniqueTrackingCode();
+  const testConfirmedOrder = await Order.create({
+    trackingCode: confirmedTrackingCode,
+    orderType: 'new',
+    status: 'confirmed',
+    firstName: 'Ahmed',
+    lastName: 'Mansouri',
+    phone: '0555123456',
+    wilaya: '16 - Alger',
+    address: '12 Rue Didouche Mourad',
+    vin: 'WAUZZZ8V1GA123456',
+  });
+  await OrderDocumentLine.create({
+    orderId: testConfirmedOrder._id,
+    documentTypeId: testDoc._id,
+    translationMode: 'original_plus_translation',
+    clientPrice: 8000,
+    costPrice: 3500,
+    source: 'local',
+    status: 'needed',
+  });
+
+  const lookupValidRes = await fetch(`${BASE_URL}/public/orders/correction/lookup?locale=fr`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      trackingCode: confirmedTrackingCode,
+      phone: '0555123456',
+    }),
+  });
   const lookupValidBody = await lookupValidRes.json();
   if (lookupValidRes.status === 200 && lookupValidBody.orderDocumentLines?.length > 0) {
-    console.log(`✓ PASS: Valid lookup returned order details and sanitized document lines.`);
+    console.log(`✓ PASS: Valid lookup against confirmed order returned details and sanitized document lines.`);
     console.log(`  Resolved French line title: "${lookupValidBody.orderDocumentLines[0].documentType.fullName}"`);
     if (lookupValidBody.orderDocumentLines[0].costPrice === undefined) {
       console.log(`✓ PASS: Line costPrice is NOT leaked in correction lookup response.`);
