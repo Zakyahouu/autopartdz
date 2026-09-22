@@ -20,6 +20,16 @@ const carCategorySchema = new mongoose.Schema(
         ref: 'DocumentType',
       },
     ],
+    translations: {
+      fr: {
+        name: { type: String, trim: true, default: '' },
+        description: { type: String, default: '' },
+      },
+      ar: {
+        name: { type: String, trim: true, default: '' },
+        description: { type: String, default: '' },
+      },
+    },
     active: {
       type: Boolean,
       default: true,

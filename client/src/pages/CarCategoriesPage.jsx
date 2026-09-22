@@ -18,6 +18,10 @@ const EMPTY_FORM = {
   description: '',
   active: true,
   requiredDocumentTypes: [],
+  translations: {
+    fr: { name: '', description: '' },
+    ar: { name: '', description: '' },
+  },
 };
 
 export default function CarCategoriesPage({ onCountChange }) {
@@ -34,6 +38,7 @@ export default function CarCategoriesPage({ onCountChange }) {
   const [actionLoadingId, setActionLoadingId] = useState(null);
   const [docFilterQuery, setDocFilterQuery] = useState('');
   const [expandedDocRowId, setExpandedDocRowId] = useState(null);
+  const [formLangTab, setFormLangTab] = useState('en'); // en | fr | ar
 
   const loadData = async () => {
     setLoading(true);
@@ -102,6 +107,7 @@ export default function CarCategoriesPage({ onCountChange }) {
     setFormData(EMPTY_FORM);
     setFormError('');
     setDocFilterQuery('');
+    setFormLangTab('en');
     setModalOpen(true);
   };
 
@@ -119,9 +125,20 @@ export default function CarCategoriesPage({ onCountChange }) {
       description: target.description || '',
       active: target.active !== false,
       requiredDocumentTypes: selectedIds,
+      translations: {
+        fr: {
+          name: target.translations?.fr?.name || '',
+          description: target.translations?.fr?.description || '',
+        },
+        ar: {
+          name: target.translations?.ar?.name || '',
+          description: target.translations?.ar?.description || '',
+        },
+      },
     });
     setFormError('');
     setDocFilterQuery('');
+    setFormLangTab('en');
     setModalOpen(true);
   };
 
@@ -130,6 +147,7 @@ export default function CarCategoriesPage({ onCountChange }) {
     setModalOpen(false);
     setEditingCategory(null);
     setDocFilterQuery('');
+    setFormLangTab('en');
   };
 
   const handleToggleActive = async (cat) => {
@@ -172,6 +190,16 @@ export default function CarCategoriesPage({ onCountChange }) {
       description: formData.description.trim(),
       active: formData.active,
       requiredDocumentTypes: formData.requiredDocumentTypes,
+      translations: {
+        fr: {
+          name: formData.translations.fr.name.trim(),
+          description: formData.translations.fr.description.trim(),
+        },
+        ar: {
+          name: formData.translations.ar.name.trim(),
+          description: formData.translations.ar.description.trim(),
+        },
+      },
     };
 
     let res;
@@ -429,35 +457,162 @@ export default function CarCategoriesPage({ onCountChange }) {
                   </div>
                 )}
 
-                <div className="admin-form-group">
-                  <label className="admin-form-label" htmlFor="cat-name">
-                    Category Name <span className="required">*</span>
-                  </label>
-                  <input
-                    id="cat-name"
-                    type="text"
-                    className="admin-input"
-                    placeholder="e.g. Passenger Vehicles (M1), Commercial Vans (N1)"
-                    value={formData.name}
-                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    required
-                    disabled={formSubmitting}
-                  />
+                {/* Language Tabs */}
+                <div className="admin-filter-tabs" style={{ marginBottom: 16 }}>
+                  <button
+                    type="button"
+                    className={`admin-filter-tab ${formLangTab === 'en' ? 'active' : ''}`}
+                    onClick={() => setFormLangTab('en')}
+                  >
+                    English (Baseline)
+                  </button>
+                  <button
+                    type="button"
+                    className={`admin-filter-tab ${formLangTab === 'fr' ? 'active' : ''}`}
+                    onClick={() => setFormLangTab('fr')}
+                  >
+                    Français (Optionnel)
+                  </button>
+                  <button
+                    type="button"
+                    className={`admin-filter-tab ${formLangTab === 'ar' ? 'active' : ''}`}
+                    onClick={() => setFormLangTab('ar')}
+                  >
+                    العربية (اختياري)
+                  </button>
                 </div>
 
-                <div className="admin-form-group">
-                  <label className="admin-form-label" htmlFor="cat-description">
-                    Description / Scope
-                  </label>
-                  <textarea
-                    id="cat-description"
-                    className="admin-textarea"
-                    placeholder="Notes for clients regarding vehicle engine limits or customs classifications…"
-                    value={formData.description}
-                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                    disabled={formSubmitting}
-                  />
-                </div>
+                {formLangTab === 'en' && (
+                  <>
+                    <div className="admin-form-group">
+                      <label className="admin-form-label" htmlFor="cat-name">
+                        Category Name (English Baseline) <span className="required">*</span>
+                      </label>
+                      <input
+                        id="cat-name"
+                        type="text"
+                        className="admin-input"
+                        placeholder="e.g. Passenger Vehicles (M1), Commercial Vans (N1)"
+                        value={formData.name}
+                        onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                        required
+                        disabled={formSubmitting}
+                      />
+                    </div>
+
+                    <div className="admin-form-group">
+                      <label className="admin-form-label" htmlFor="cat-description">
+                        Description / Scope (English Baseline)
+                      </label>
+                      <textarea
+                        id="cat-description"
+                        className="admin-textarea"
+                        placeholder="Notes for clients regarding vehicle engine limits or customs classifications…"
+                        value={formData.description}
+                        onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                        disabled={formSubmitting}
+                      />
+                    </div>
+                  </>
+                )}
+
+                {formLangTab === 'fr' && (
+                  <>
+                    <div className="admin-form-group">
+                      <label className="admin-form-label" htmlFor="cat-name-fr">
+                        Nom de la Catégorie (Français)
+                      </label>
+                      <input
+                        id="cat-name-fr"
+                        type="text"
+                        className="admin-input"
+                        placeholder="ex. Véhicules Particuliers (M1), Utilitaires (N1)"
+                        value={formData.translations.fr.name}
+                        onChange={(e) =>
+                          setFormData({
+                            ...formData,
+                            translations: {
+                              ...formData.translations,
+                              fr: { ...formData.translations.fr, name: e.target.value },
+                            },
+                          })
+                        }
+                        disabled={formSubmitting}
+                      />
+                    </div>
+
+                    <div className="admin-form-group">
+                      <label className="admin-form-label" htmlFor="cat-description-fr">
+                        Description / Portée (Français)
+                      </label>
+                      <textarea
+                        id="cat-description-fr"
+                        className="admin-textarea"
+                        placeholder="Précisions pour les clients concernant les règles de dédouanement…"
+                        value={formData.translations.fr.description}
+                        onChange={(e) =>
+                          setFormData({
+                            ...formData,
+                            translations: {
+                              ...formData.translations,
+                              fr: { ...formData.translations.fr, description: e.target.value },
+                            },
+                          })
+                        }
+                        disabled={formSubmitting}
+                      />
+                    </div>
+                  </>
+                )}
+
+                {formLangTab === 'ar' && (
+                  <div dir="rtl">
+                    <div className="admin-form-group">
+                      <label className="admin-form-label" htmlFor="cat-name-ar">
+                        اسم الصنف (بالعربية)
+                      </label>
+                      <input
+                        id="cat-name-ar"
+                        type="text"
+                        className="admin-input"
+                        placeholder="مثال: المركبات السياحية (M1)، النفعية (N1)"
+                        value={formData.translations.ar.name}
+                        onChange={(e) =>
+                          setFormData({
+                            ...formData,
+                            translations: {
+                              ...formData.translations,
+                              ar: { ...formData.translations.ar, name: e.target.value },
+                            },
+                          })
+                        }
+                        disabled={formSubmitting}
+                      />
+                    </div>
+
+                    <div className="admin-form-group">
+                      <label className="admin-form-label" htmlFor="cat-description-ar">
+                        الوصف ونطاق الإجراء (بالعربية)
+                      </label>
+                      <textarea
+                        id="cat-description-ar"
+                        className="admin-textarea"
+                        placeholder="إرشادات المستوردين بخصوص الشروط الجمركية وسعة المحرك…"
+                        value={formData.translations.ar.description}
+                        onChange={(e) =>
+                          setFormData({
+                            ...formData,
+                            translations: {
+                              ...formData.translations,
+                              ar: { ...formData.translations.ar, description: e.target.value },
+                            },
+                          })
+                        }
+                        disabled={formSubmitting}
+                      />
+                    </div>
+                  </div>
+                )}
 
                 <label className="admin-checkbox-label">
                   <input

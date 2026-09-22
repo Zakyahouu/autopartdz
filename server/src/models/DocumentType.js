@@ -76,6 +76,18 @@ const documentTypeSchema = new mongoose.Schema(
       trim: true,
       lowercase: true,
     },
+    translations: {
+      fr: {
+        fullName: { type: String, trim: true, default: '' },
+        description: { type: String, default: '' },
+        category: { type: String, default: '' },
+      },
+      ar: {
+        fullName: { type: String, trim: true, default: '' },
+        description: { type: String, default: '' },
+        category: { type: String, default: '' },
+      },
+    },
     active: {
       type: Boolean,
       default: true,

@@ -36,7 +36,7 @@ async function validateDocTypeIds(ids) {
 // ── POST /api/car-categories ──────────────────────────────────────────────────
 router.post('/', async (req, res) => {
   try {
-    const { name, description, requiredDocumentTypes } = req.body;
+    const { name, description, requiredDocumentTypes, active, translations } = req.body;
 
     if (!name?.trim()) {
       return res.status(400).json({ error: 'name is required.' });
@@ -50,11 +50,27 @@ router.post('/', async (req, res) => {
       });
     }
 
-    const category = await CarCategory.create({
+    const catData = {
       name: name.trim(),
       description: description?.trim() || '',
       requiredDocumentTypes: requiredDocumentTypes || [],
-    });
+      active: active !== undefined ? Boolean(active) : true,
+    };
+
+    if (translations && typeof translations === 'object') {
+      catData.translations = {
+        fr: {
+          name: translations.fr?.name?.trim() || '',
+          description: translations.fr?.description?.trim() || '',
+        },
+        ar: {
+          name: translations.ar?.name?.trim() || '',
+          description: translations.ar?.description?.trim() || '',
+        },
+      };
+    }
+
+    const category = await CarCategory.create(catData);
 
     return res.status(201).json(category);
   } catch (err) {
@@ -96,7 +112,7 @@ router.patch('/:id', async (req, res) => {
     const category = await CarCategory.findById(req.params.id);
     if (!category) return res.status(404).json({ error: 'Car category not found.' });
 
-    const { name, description, requiredDocumentTypes, active } = req.body;
+    const { name, description, requiredDocumentTypes, active, translations } = req.body;
     const updates = {};
 
     if (requiredDocumentTypes !== undefined) {
@@ -113,6 +129,18 @@ router.patch('/:id', async (req, res) => {
     if (name !== undefined) updates.name = name.trim();
     if (description !== undefined) updates.description = description.trim();
     if (active !== undefined) updates.active = Boolean(active);
+    if (translations !== undefined && typeof translations === 'object') {
+      updates.translations = {
+        fr: {
+          name: translations?.fr?.name !== undefined ? translations.fr.name.trim() : (category.translations?.fr?.name || ''),
+          description: translations?.fr?.description !== undefined ? translations.fr.description.trim() : (category.translations?.fr?.description || ''),
+        },
+        ar: {
+          name: translations?.ar?.name !== undefined ? translations.ar.name.trim() : (category.translations?.ar?.name || ''),
+          description: translations?.ar?.description !== undefined ? translations.ar.description.trim() : (category.translations?.ar?.description || ''),
+        },
+      };
+    }
 
     if (Object.keys(updates).length === 0) {
       return res.status(400).json({ error: 'No valid fields provided for update.' });

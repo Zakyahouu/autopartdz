@@ -1,0 +1,650 @@
+/* ═══════════════════════════════════════════════════════════════════
+   Dossier Design System — Moment Tier CSS
+   Used strictly for the public client-facing clearance portal.
+   Features warm parchment palette, manila folder tabs, hard offset
+   stacked paper shadows, and tilted rubber stamps.
+═══════════════════════════════════════════════════════════════════ */
+
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Reem+Kufi:wght@500;600;700&family=JetBrains+Mono:wght@600;700&display=swap');
+
+.moment-shell {
+  --page:       #efe6d0;
+  --page-2:     #e6dabc;
+  --manila:     #dcc590;
+  --card:       #f8f2e2;
+  --ink:        #16233f;
+  --ink-2:      #465170;
+  --stamp:      #a8231b;
+  --ok:         #1e6a44;
+  --china:      #3a5e8c;
+  --line:       rgba(22, 35, 63, 0.24);
+  --shadow:     rgba(22, 35, 63, 0.20);
+
+  min-height: 100vh;
+  background-color: var(--page);
+  color: var(--ink);
+  font-family: 'IBM Plex Sans Arabic', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  line-height: 1.6;
+  position: relative;
+  background-image: radial-gradient(rgba(22, 35, 63, 0.05) 1px, transparent 0);
+  background-size: 24px 24px;
+}
+
+/* ── Public Navbar ──────────────────────────────────────────────────────────── */
+.moment-navbar {
+  border-bottom: 2px solid var(--ink);
+  background-color: var(--page-2);
+  padding: 12px 24px;
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  box-shadow: 0 2px 0 var(--shadow);
+}
+
+.moment-nav-inner {
+  max-width: 1100px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.moment-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  text-decoration: none;
+  color: var(--ink);
+}
+
+.moment-brand-stamp {
+  width: 36px;
+  height: 36px;
+  border: 2px solid var(--stamp);
+  color: var(--stamp);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Reem Kufi', sans-serif;
+  font-weight: 700;
+  font-size: 18px;
+  transform: rotate(-3deg);
+  box-shadow: -2px 2px 0 var(--stamp);
+  border-radius: 3px;
+}
+
+.moment-brand-title {
+  font-family: 'Reem Kufi', sans-serif;
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.moment-brand-title span {
+  color: var(--stamp);
+}
+
+.moment-brand-desc {
+  font-size: 11.5px;
+  color: var(--ink-2);
+}
+
+.moment-nav-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.moment-lang-picker {
+  display: inline-flex;
+  background: var(--card);
+  border: 1.5px solid var(--ink);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.moment-lang-btn {
+  padding: 5px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  border: none;
+  background: transparent;
+  color: var(--ink-2);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.moment-lang-btn.active {
+  background: var(--ink);
+  color: #fff;
+}
+
+.moment-nav-admin-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink);
+  text-decoration: none;
+  padding: 6px 12px;
+  border: 1.5px dashed var(--ink-2);
+  border-radius: 4px;
+  background: var(--card);
+  transition: all 0.15s ease;
+}
+
+.moment-nav-admin-link:hover {
+  background: var(--page);
+  border-style: solid;
+}
+
+/* ── Container ──────────────────────────────────────────────────────────────── */
+.moment-container {
+  max-width: 960px;
+  margin: 32px auto;
+  padding: 0 20px 60px;
+}
+
+/* ── Dossier Folder Header Tabs (Choose Flow) ───────────────────────────────── */
+.dossier-tab-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  margin-bottom: -2px;
+  position: relative;
+  z-index: 2;
+}
+
+.dossier-tab-btn {
+  background: var(--page-2);
+  border: 2px solid var(--ink);
+  border-bottom: none;
+  border-radius: 8px 24px 0 0;
+  padding: 12px 24px;
+  font-family: 'Reem Kufi', sans-serif;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--ink-2);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: background 0.15s ease, transform 0.15s ease;
+}
+
+[dir="rtl"] .dossier-tab-btn {
+  border-radius: 24px 8px 0 0;
+}
+
+.dossier-tab-btn:hover {
+  background: var(--manila);
+}
+
+.dossier-tab-btn.active {
+  background: var(--card);
+  color: var(--ink);
+  border-bottom: 2px solid var(--card);
+  box-shadow: -4px -3px 0 var(--shadow);
+  transform: translateY(-2px);
+}
+
+/* ── Main Folder Body ───────────────────────────────────────────────────────── */
+.dossier-folder {
+  background: var(--card);
+  border: 2px solid var(--ink);
+  border-radius: 0 12px 12px 12px;
+  box-shadow: -6px 6px 0 var(--shadow);
+  padding: 32px;
+  position: relative;
+}
+
+[dir="rtl"] .dossier-folder {
+  border-radius: 12px 0 12px 12px;
+  box-shadow: 6px 6px 0 var(--shadow);
+}
+
+/* ── Stepper Indicator ──────────────────────────────────────────────────────── */
+.moment-stepper {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 32px;
+  padding-bottom: 20px;
+  border-bottom: 2px dashed var(--line);
+  overflow-x: auto;
+  gap: 12px;
+}
+
+.moment-step-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+
+.moment-step-num {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 2px solid var(--ink-2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Reem Kufi', sans-serif;
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.moment-step-item.active {
+  color: var(--stamp);
+  font-weight: 700;
+}
+
+.moment-step-item.active .moment-step-num {
+  border-color: var(--stamp);
+  color: var(--stamp);
+  transform: rotate(-5deg);
+  box-shadow: -2px 2px 0 var(--stamp);
+}
+
+.moment-step-item.done {
+  color: var(--ok);
+}
+
+.moment-step-item.done .moment-step-num {
+  border-color: var(--ok);
+  color: #fff;
+  background: var(--ok);
+}
+
+/* ── Step Headings ──────────────────────────────────────────────────────────── */
+.moment-step-title {
+  font-family: 'Reem Kufi', sans-serif;
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--ink);
+  margin-bottom: 4px;
+}
+
+.moment-step-desc {
+  font-size: 13.5px;
+  color: var(--ink-2);
+  margin-bottom: 24px;
+}
+
+/* ── Cards in Moment Tier (Category & Document Pickers) ─────────────────────── */
+.moment-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.moment-select-card {
+  background: var(--page);
+  border: 1.5px solid var(--ink);
+  border-radius: 6px;
+  padding: 16px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  position: relative;
+  box-shadow: -3px 3px 0 var(--shadow);
+}
+
+.moment-select-card:hover {
+  transform: translateY(-2px);
+  box-shadow: -5px 5px 0 var(--shadow);
+  background: var(--manila);
+}
+
+.moment-select-card.selected {
+  background: #fff;
+  border: 2px solid var(--stamp);
+  box-shadow: -4px 4px 0 var(--stamp);
+}
+
+.moment-card-title {
+  font-family: 'Reem Kufi', sans-serif;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--ink);
+  margin-bottom: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.moment-card-desc {
+  font-size: 12.5px;
+  color: var(--ink-2);
+  line-height: 1.5;
+  margin-bottom: 8px;
+}
+
+.moment-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 3px;
+  border: 1px solid currentColor;
+}
+
+.moment-badge-stamp {
+  color: var(--stamp);
+  background: rgba(168, 35, 27, 0.08);
+}
+
+.moment-badge-ok {
+  color: var(--ok);
+  background: rgba(30, 106, 68, 0.08);
+}
+
+.moment-badge-china {
+  color: var(--china);
+  background: rgba(58, 94, 140, 0.08);
+}
+
+/* ── Document Item Row ──────────────────────────────────────────────────────── */
+.moment-doc-row {
+  background: var(--page);
+  border: 1.5px solid var(--ink);
+  border-radius: 6px;
+  padding: 14px 18px;
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  box-shadow: -2px 2px 0 var(--shadow);
+  flex-wrap: wrap;
+}
+
+.moment-doc-row.selected {
+  background: #fff;
+  border-color: var(--ink);
+  box-shadow: -4px 4px 0 var(--shadow);
+}
+
+.moment-doc-info {
+  flex: 1;
+  min-width: 240px;
+}
+
+.moment-doc-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.moment-doc-code {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 1px 5px;
+  background: var(--ink);
+  color: #fff;
+  border-radius: 3px;
+  direction: ltr;
+  display: inline-block;
+}
+
+.moment-doc-name {
+  font-family: 'Reem Kufi', sans-serif;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.moment-doc-sub {
+  font-size: 12px;
+  color: var(--ink-2);
+}
+
+.moment-doc-options {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+/* ── Form Inputs ────────────────────────────────────────────────────────────── */
+.moment-form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.moment-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.moment-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.moment-label .required {
+  color: var(--stamp);
+}
+
+.moment-input,
+.moment-select,
+.moment-textarea {
+  background: #fff;
+  border: 1.5px solid var(--ink);
+  border-radius: 4px;
+  padding: 10px 14px;
+  font-family: inherit;
+  font-size: 14px;
+  color: var(--ink);
+  box-shadow: inset 0 1px 3px rgba(22, 35, 63, 0.08);
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.moment-input:focus,
+.moment-select:focus,
+.moment-textarea:focus {
+  border-color: var(--stamp);
+  box-shadow: 0 0 0 3px rgba(168, 35, 27, 0.15);
+}
+
+.moment-input.mono {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  direction: ltr;
+}
+
+.moment-textarea {
+  min-height: 80px;
+  resize: vertical;
+}
+
+/* ── Pricing Summary Box ────────────────────────────────────────────────────── */
+.moment-total-box {
+  background: var(--page-2);
+  border: 2px dashed var(--ink);
+  border-radius: 6px;
+  padding: 18px 24px;
+  margin: 24px 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.moment-total-title {
+  font-family: 'Reem Kufi', sans-serif;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.moment-total-amount {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 26px;
+  font-weight: 700;
+  color: var(--stamp);
+  direction: ltr;
+  display: inline-block;
+}
+
+/* ── Actions Bar ────────────────────────────────────────────────────────────── */
+.moment-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 28px;
+  padding-top: 20px;
+  border-top: 1.5px dashed var(--line);
+  flex-wrap: wrap;
+}
+
+.moment-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 22px;
+  font-family: 'Reem Kufi', sans-serif;
+  font-size: 15px;
+  font-weight: 700;
+  border-radius: 4px;
+  border: 2px solid var(--ink);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  text-decoration: none;
+}
+
+.moment-btn-primary {
+  background: var(--stamp);
+  color: #fff;
+  border-color: var(--stamp);
+  box-shadow: -4px 4px 0 var(--ink);
+}
+
+.moment-btn-primary:hover:not(:disabled) {
+  transform: translate(2px, -2px);
+  box-shadow: -6px 6px 0 var(--ink);
+}
+
+.moment-btn-primary:active:not(:disabled) {
+  transform: translate(-1px, 1px);
+  box-shadow: -1px 1px 0 var(--ink);
+}
+
+.moment-btn-secondary {
+  background: var(--page);
+  color: var(--ink);
+  box-shadow: -3px 3px 0 var(--shadow);
+}
+
+.moment-btn-secondary:hover {
+  background: var(--manila);
+}
+
+.moment-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ── Rubber Stamp Receipt Screen ────────────────────────────────────────────── */
+.moment-stamp-container {
+  text-align: center;
+  padding: 40px 20px;
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+.moment-rubber-stamp {
+  display: inline-block;
+  border: 4px double var(--stamp);
+  border-radius: 8px;
+  padding: 24px 36px;
+  transform: rotate(-3deg);
+  box-shadow: -6px 6px 0 rgba(168, 35, 27, 0.25);
+  margin: 28px 0;
+  background: rgba(168, 35, 27, 0.03);
+  position: relative;
+}
+
+.moment-rubber-stamp::before {
+  content: '★ OFFICIAL REGISTRATION ★';
+  display: block;
+  font-family: 'Reem Kufi', sans-serif;
+  font-size: 11px;
+  letter-spacing: 2px;
+  font-weight: 700;
+  color: var(--stamp);
+  margin-bottom: 8px;
+}
+
+.moment-rubber-code {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 38px;
+  font-weight: 800;
+  color: var(--stamp);
+  letter-spacing: 4px;
+  direction: ltr;
+  display: block;
+  user-select: all;
+}
+
+.moment-rubber-sub {
+  margin-top: 8px;
+  font-family: 'Reem Kufi', sans-serif;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--stamp);
+  letter-spacing: 1px;
+}
+
+.moment-stamp-notice {
+  background: var(--page-2);
+  border-left: 4px solid var(--stamp);
+  padding: 14px 18px;
+  font-size: 13.5px;
+  color: var(--ink);
+  text-align: start;
+  border-radius: 0 4px 4px 0;
+  margin-bottom: 24px;
+}
+
+[dir="rtl"] .moment-stamp-notice {
+  border-left: none;
+  border-right: 4px solid var(--stamp);
+  border-radius: 4px 0 0 4px;
+}
+
+/* ── Correction Flag Card ───────────────────────────────────────────────────── */
+.moment-correction-card {
+  background: var(--page);
+  border: 1.5px solid var(--ink);
+  border-radius: 6px;
+  padding: 16px;
+  margin-bottom: 12px;
+  transition: all 0.15s ease;
+}
+
+.moment-correction-card.flagged {
+  background: #fff;
+  border: 2px solid var(--stamp);
+  box-shadow: -4px 4px 0 var(--stamp);
+}

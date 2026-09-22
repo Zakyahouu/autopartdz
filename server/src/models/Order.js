@@ -34,9 +34,37 @@ const orderSchema = new mongoose.Schema(
       default: 'pending',
     },
     // Client details
-    clientName: {
+    firstName: {
       type: String,
-      required: [true, 'Client name is required'],
+      required: [true, 'First name is required'],
+      trim: true,
+    },
+    lastName: {
+      type: String,
+      required: [true, 'Last name is required'],
+      trim: true,
+    },
+    email: {
+      type: String,
+      trim: true,
+      lowercase: true,
+      default: '',
+      validate: {
+        validator: function (v) {
+          if (!v) return true;
+          return /^\S+@\S+\.\S+$/.test(v);
+        },
+        message: 'Invalid email address format',
+      },
+    },
+    passportNumber: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    address: {
+      type: String,
+      required: [true, 'Address is required'],
       trim: true,
     },
     wilaya: {

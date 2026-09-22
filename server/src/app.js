@@ -7,6 +7,8 @@ const healthRoutes = require('./routes/health');
 const documentTypesRoutes = require('./routes/documentTypes');
 const carCategoriesRoutes = require('./routes/carCategories');
 const filesRoutes = require('./routes/files');
+const publicRoutes = require('./routes/public');
+const ordersRoutes = require('./routes/orders');
 
 const app = express();
 
@@ -31,6 +33,8 @@ app.use('/api/users', usersRoutes);
 app.use('/api/document-types', documentTypesRoutes);
 app.use('/api/car-categories', carCategoriesRoutes);
 app.use('/api/files', filesRoutes);
+app.use('/api/public', publicRoutes);
+app.use('/api/orders', ordersRoutes);
 
 // ── 404 catch-all ────────────────────────────────────────────────────────────
 app.use((req, res) => {

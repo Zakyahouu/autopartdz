@@ -61,7 +61,7 @@ router.post('/', async (req, res) => {
     const {
       name, shortName, fullName, description, code, category, originLanguage,
       hasTranslation, pricing, defaultSource, estimatedTurnaroundDays,
-      sortOrder, slug,
+      sortOrder, slug, translations,
     } = req.body;
 
     const resolvedName = (name || shortName || '').trim();
@@ -135,6 +135,21 @@ router.post('/', async (req, res) => {
       docData.estimatedTurnaroundDays = Number(estimatedTurnaroundDays);
     }
 
+    if (translations && typeof translations === 'object') {
+      docData.translations = {
+        fr: {
+          fullName: translations.fr?.fullName?.trim() || '',
+          description: translations.fr?.description?.trim() || '',
+          category: translations.fr?.category?.trim() || '',
+        },
+        ar: {
+          fullName: translations.ar?.fullName?.trim() || '',
+          description: translations.ar?.description?.trim() || '',
+          category: translations.ar?.category?.trim() || '',
+        },
+      };
+    }
+
     const doc = await DocumentType.create(docData);
     return res.status(201).json(doc);
   } catch (err) {
@@ -179,7 +194,7 @@ router.patch('/:id', async (req, res) => {
     const {
       shortName, fullName, description, code, category, originLanguage,
       hasTranslation, pricing, defaultSource, estimatedTurnaroundDays,
-      sortOrder, slug, active,
+      sortOrder, slug, active, translations,
     } = req.body;
 
     const updates = {};
@@ -287,6 +302,20 @@ router.patch('/:id', async (req, res) => {
       updates.estimatedTurnaroundDays = estimatedTurnaroundDays === null
         ? null
         : Number(estimatedTurnaroundDays);
+    }
+    if (translations !== undefined && typeof translations === 'object') {
+      updates.translations = {
+        fr: {
+          fullName: translations?.fr?.fullName !== undefined ? translations.fr.fullName.trim() : (doc.translations?.fr?.fullName || ''),
+          description: translations?.fr?.description !== undefined ? translations.fr.description.trim() : (doc.translations?.fr?.description || ''),
+          category: translations?.fr?.category !== undefined ? translations.fr.category.trim() : (doc.translations?.fr?.category || ''),
+        },
+        ar: {
+          fullName: translations?.ar?.fullName !== undefined ? translations.ar.fullName.trim() : (doc.translations?.ar?.fullName || ''),
+          description: translations?.ar?.description !== undefined ? translations.ar.description.trim() : (doc.translations?.ar?.description || ''),
+          category: translations?.ar?.category !== undefined ? translations.ar.category.trim() : (doc.translations?.ar?.category || ''),
+        },
+      };
     }
 
     if (Object.keys(updates).length === 0) {

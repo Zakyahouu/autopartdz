@@ -60,7 +60,7 @@ const orderDocumentLineSchema = new mongoose.Schema(
     source: {
       type: String,
       enum: ['local', 'china'],
-      required: [true, 'Source is required'],
+      default: null,
     },
     // Only set for China-sourced lines
     assignedChinaAccountId: {

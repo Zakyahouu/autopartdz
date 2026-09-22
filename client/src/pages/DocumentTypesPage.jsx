@@ -34,6 +34,10 @@ const EMPTY_FORM = {
     originalPlusTranslation: { clientPrice: '', costPrice: '' },
     translationOnly: { clientPrice: '', costPrice: '' },
   },
+  translations: {
+    fr: { fullName: '', description: '', category: '' },
+    ar: { fullName: '', description: '', category: '' },
+  },
 };
 
 export default function DocumentTypesPage({ onCountChange }) {
@@ -47,6 +51,7 @@ export default function DocumentTypesPage({ onCountChange }) {
   const [formError, setFormError] = useState('');
   const [formSubmitting, setFormSubmitting] = useState(false);
   const [actionLoadingId, setActionLoadingId] = useState(null);
+  const [formLangTab, setFormLangTab] = useState('en'); // en | fr | ar
 
   // Confirmation modal state
   const [confirmModal, setConfirmModal] = useState({
@@ -117,6 +122,7 @@ export default function DocumentTypesPage({ onCountChange }) {
     if (existingImageUrl) URL.revokeObjectURL(existingImageUrl);
     setImagePreviewUrl(null);
     setExistingImageUrl(null);
+    setFormLangTab('en');
     setModalOpen(true);
   };
 
@@ -146,6 +152,18 @@ export default function DocumentTypesPage({ onCountChange }) {
           costPrice: item.pricing?.translationOnly?.costPrice ?? '',
         },
       },
+      translations: {
+        fr: {
+          fullName: item.translations?.fr?.fullName || '',
+          description: item.translations?.fr?.description || '',
+          category: item.translations?.fr?.category || '',
+        },
+        ar: {
+          fullName: item.translations?.ar?.fullName || '',
+          description: item.translations?.ar?.description || '',
+          category: item.translations?.ar?.category || '',
+        },
+      },
     });
     setFormError('');
     setSelectedFile(null);
@@ -159,6 +177,7 @@ export default function DocumentTypesPage({ onCountChange }) {
       if (url) setExistingImageUrl(url);
     }
 
+    setFormLangTab('en');
     setModalOpen(true);
   };
 
@@ -167,6 +186,7 @@ export default function DocumentTypesPage({ onCountChange }) {
     setModalOpen(false);
     setEditingItem(null);
     setSelectedFile(null);
+    setFormLangTab('en');
     if (imagePreviewUrl) URL.revokeObjectURL(imagePreviewUrl);
     if (existingImageUrl) URL.revokeObjectURL(existingImageUrl);
     setImagePreviewUrl(null);
@@ -272,6 +292,18 @@ export default function DocumentTypesPage({ onCountChange }) {
         originalOnly: {
           clientPrice: Number(formData.pricing.originalOnly.clientPrice),
           costPrice: Number(formData.pricing.originalOnly.costPrice),
+        },
+      },
+      translations: {
+        fr: {
+          fullName: formData.translations.fr.fullName.trim(),
+          description: formData.translations.fr.description.trim(),
+          category: formData.translations.fr.category.trim(),
+        },
+        ar: {
+          fullName: formData.translations.ar.fullName.trim(),
+          description: formData.translations.ar.description.trim(),
+          category: formData.translations.ar.category.trim(),
         },
       },
     };
@@ -759,65 +791,262 @@ export default function DocumentTypesPage({ onCountChange }) {
                   </div>
                 )}
 
-                {/* Primary Name & Customs Code */}
-                <div className="admin-form-grid">
-                  <div className="admin-form-group">
-                    <label className="admin-form-label" htmlFor="doc-name">
-                      Document Name <span className="required">*</span>
-                    </label>
-                    <input
-                      id="doc-name"
-                      type="text"
-                      className="admin-input"
-                      placeholder="e.g. Certificate of Conformity"
-                      value={formData.name}
-                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                      required
-                      disabled={formSubmitting}
-                    />
-                    <span className="admin-form-hint">Official title shown to clients.</span>
-                  </div>
-
-                  <div className="admin-form-group">
-                    <label className="admin-form-label" htmlFor="doc-code">
-                      Customs Code
-                    </label>
-                    <input
-                      id="doc-code"
-                      type="text"
-                      className="admin-input mono"
-                      placeholder="e.g. COC, CI, CO"
-                      value={formData.code}
-                      onChange={(e) => setFormData({ ...formData, code: e.target.value.toUpperCase() })}
-                      disabled={formSubmitting || (Boolean(editingItem) && Boolean(editingItem.code))}
-                    />
-                    <span className="admin-form-hint">
-                      {editingItem?.code
-                        ? 'Code is immutable once set and cannot be altered.'
-                        : 'Short abbreviation. Leave blank if none.'}
-                    </span>
-                  </div>
+                {/* Language Tabs */}
+                <div className="admin-filter-tabs" style={{ marginBottom: 16 }}>
+                  <button
+                    type="button"
+                    className={`admin-filter-tab ${formLangTab === 'en' ? 'active' : ''}`}
+                    onClick={() => setFormLangTab('en')}
+                  >
+                    English (Baseline)
+                  </button>
+                  <button
+                    type="button"
+                    className={`admin-filter-tab ${formLangTab === 'fr' ? 'active' : ''}`}
+                    onClick={() => setFormLangTab('fr')}
+                  >
+                    Français (Optionnel)
+                  </button>
+                  <button
+                    type="button"
+                    className={`admin-filter-tab ${formLangTab === 'ar' ? 'active' : ''}`}
+                    onClick={() => setFormLangTab('ar')}
+                  >
+                    العربية (اختياري)
+                  </button>
                 </div>
 
-                {/* Category & Default Sourcing */}
-                <div className="admin-form-grid">
-                  <div className="admin-form-group">
-                    <label className="admin-form-label" htmlFor="doc-category">
-                      Category
-                    </label>
-                    <input
-                      id="doc-category"
-                      type="text"
-                      list="category-suggestions"
-                      className="admin-input"
-                      placeholder="e.g. Customs Clearance, Technical"
-                      value={formData.category}
-                      onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                      disabled={formSubmitting}
-                    />
-                    <span className="admin-form-hint">Group for the client request form.</span>
-                  </div>
+                {formLangTab === 'en' && (
+                  <>
+                    {/* Primary Name & Customs Code */}
+                    <div className="admin-form-grid">
+                      <div className="admin-form-group">
+                        <label className="admin-form-label" htmlFor="doc-name">
+                          Document Name (English Baseline) <span className="required">*</span>
+                        </label>
+                        <input
+                          id="doc-name"
+                          type="text"
+                          className="admin-input"
+                          placeholder="e.g. Certificate of Conformity"
+                          value={formData.name}
+                          onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                          required
+                          disabled={formSubmitting}
+                        />
+                        <span className="admin-form-hint">Official title shown to clients.</span>
+                      </div>
 
+                      <div className="admin-form-group">
+                        <label className="admin-form-label" htmlFor="doc-code">
+                          Customs Code
+                        </label>
+                        <input
+                          id="doc-code"
+                          type="text"
+                          className="admin-input mono"
+                          placeholder="e.g. COC, CI, CO"
+                          value={formData.code}
+                          onChange={(e) => setFormData({ ...formData, code: e.target.value.toUpperCase() })}
+                          disabled={formSubmitting || (Boolean(editingItem) && Boolean(editingItem.code))}
+                        />
+                        <span className="admin-form-hint">
+                          {editingItem?.code
+                            ? 'Code is immutable once set and cannot be altered.'
+                            : 'Short abbreviation. Leave blank if none.'}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="admin-form-grid">
+                      <div className="admin-form-group">
+                        <label className="admin-form-label" htmlFor="doc-category">
+                          Category (English Baseline)
+                        </label>
+                        <input
+                          id="doc-category"
+                          type="text"
+                          list="category-suggestions"
+                          className="admin-input"
+                          placeholder="e.g. Customs Clearance, Technical"
+                          value={formData.category}
+                          onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                          disabled={formSubmitting}
+                        />
+                        <span className="admin-form-hint">Group for the client request form.</span>
+                      </div>
+                    </div>
+
+                    {/* Client-facing Description */}
+                    <div className="admin-form-group">
+                      <label className="admin-form-label" htmlFor="doc-description">
+                        Client Description / Instructions (English Baseline)
+                      </label>
+                      <textarea
+                        id="doc-description"
+                        className="admin-textarea"
+                        placeholder="Explain what this document is and why Algerian customs requires it for import clearance…"
+                        value={formData.description}
+                        onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                        disabled={formSubmitting}
+                      />
+                      <span className="admin-form-hint">
+                        This explanation will be displayed to clients on the request form.
+                      </span>
+                    </div>
+                  </>
+                )}
+
+                {formLangTab === 'fr' && (
+                  <>
+                    <div className="admin-form-grid">
+                      <div className="admin-form-group">
+                        <label className="admin-form-label" htmlFor="doc-name-fr">
+                          Nom Officiel du Document (Français)
+                        </label>
+                        <input
+                          id="doc-name-fr"
+                          type="text"
+                          className="admin-input"
+                          placeholder="ex. Certificat de Conformité"
+                          value={formData.translations.fr.fullName}
+                          onChange={(e) =>
+                            setFormData({
+                              ...formData,
+                              translations: {
+                                ...formData.translations,
+                                fr: { ...formData.translations.fr, fullName: e.target.value },
+                              },
+                            })
+                          }
+                          disabled={formSubmitting}
+                        />
+                      </div>
+
+                      <div className="admin-form-group">
+                        <label className="admin-form-label" htmlFor="doc-category-fr">
+                          Catégorie (Français)
+                        </label>
+                        <input
+                          id="doc-category-fr"
+                          type="text"
+                          className="admin-input"
+                          placeholder="ex. Dédouanement, Technique"
+                          value={formData.translations.fr.category}
+                          onChange={(e) =>
+                            setFormData({
+                              ...formData,
+                              translations: {
+                                ...formData.translations,
+                                fr: { ...formData.translations.fr, category: e.target.value },
+                              },
+                            })
+                          }
+                          disabled={formSubmitting}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="admin-form-group">
+                      <label className="admin-form-label" htmlFor="doc-description-fr">
+                        Description / Explication Client (Français)
+                      </label>
+                      <textarea
+                        id="doc-description-fr"
+                        className="admin-textarea"
+                        placeholder="Explication du rôle de ce document pour le dédouanement en Algérie…"
+                        value={formData.translations.fr.description}
+                        onChange={(e) =>
+                          setFormData({
+                            ...formData,
+                            translations: {
+                              ...formData.translations,
+                              fr: { ...formData.translations.fr, description: e.target.value },
+                            },
+                          })
+                        }
+                        disabled={formSubmitting}
+                      />
+                    </div>
+                  </>
+                )}
+
+                {formLangTab === 'ar' && (
+                  <div dir="rtl">
+                    <div className="admin-form-grid">
+                      <div className="admin-form-group">
+                        <label className="admin-form-label" htmlFor="doc-name-ar">
+                          الاسم الرسمي للوثيقة (بالعربية)
+                        </label>
+                        <input
+                          id="doc-name-ar"
+                          type="text"
+                          className="admin-input"
+                          placeholder="مثال: شهادة المطابقة الجمركية"
+                          value={formData.translations.ar.fullName}
+                          onChange={(e) =>
+                            setFormData({
+                              ...formData,
+                              translations: {
+                                ...formData.translations,
+                                ar: { ...formData.translations.ar, fullName: e.target.value },
+                              },
+                            })
+                          }
+                          disabled={formSubmitting}
+                        />
+                      </div>
+
+                      <div className="admin-form-group">
+                        <label className="admin-form-label" htmlFor="doc-category-ar">
+                          التصنيف / الفئة (بالعربية)
+                        </label>
+                        <input
+                          id="doc-category-ar"
+                          type="text"
+                          className="admin-input"
+                          placeholder="مثال: تخليص جمركي، تقني"
+                          value={formData.translations.ar.category}
+                          onChange={(e) =>
+                            setFormData({
+                              ...formData,
+                              translations: {
+                                ...formData.translations,
+                                ar: { ...formData.translations.ar, category: e.target.value },
+                              },
+                            })
+                          }
+                          disabled={formSubmitting}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="admin-form-group">
+                      <label className="admin-form-label" htmlFor="doc-description-ar">
+                        شرح وتفاصيل الوثيقة للمستورد (بالعربية)
+                      </label>
+                      <textarea
+                        id="doc-description-ar"
+                        className="admin-textarea"
+                        placeholder="توضيح أهمية هذه الوثيقة وشروط قبولها لدى الجمارك الجزائرية…"
+                        value={formData.translations.ar.description}
+                        onChange={(e) =>
+                          setFormData({
+                            ...formData,
+                            translations: {
+                              ...formData.translations,
+                              ar: { ...formData.translations.ar, description: e.target.value },
+                            },
+                          })
+                        }
+                        disabled={formSubmitting}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* Operational Fields: Sourcing, Origin Language, Turnaround */}
+                <div className="admin-form-grid">
                   <div className="admin-form-group">
                     <label className="admin-form-label" htmlFor="doc-defaultSource">
                       Default Sourcing <span className="required">*</span>
@@ -834,10 +1063,7 @@ export default function DocumentTypesPage({ onCountChange }) {
                       <option value="mixed">Mixed / Depends on Vehicle</option>
                     </select>
                   </div>
-                </div>
 
-                {/* Language & Turnaround */}
-                <div className="admin-form-grid">
                   <div className="admin-form-group">
                     <label className="admin-form-label" htmlFor="doc-originLanguage">
                       Origin Language
@@ -855,7 +1081,9 @@ export default function DocumentTypesPage({ onCountChange }) {
                       <option value="Other">Other</option>
                     </select>
                   </div>
+                </div>
 
+                <div className="admin-form-grid">
                   <div className="admin-form-group">
                     <label className="admin-form-label" htmlFor="doc-turnaround">
                       Est. Turnaround Time (Days)
@@ -871,24 +1099,6 @@ export default function DocumentTypesPage({ onCountChange }) {
                       disabled={formSubmitting}
                     />
                   </div>
-                </div>
-
-                {/* Client-facing Description */}
-                <div className="admin-form-group">
-                  <label className="admin-form-label" htmlFor="doc-description">
-                    Client Description / Instructions
-                  </label>
-                  <textarea
-                    id="doc-description"
-                    className="admin-textarea"
-                    placeholder="Explain what this document is and why Algerian customs requires it for import clearance…"
-                    value={formData.description}
-                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                    disabled={formSubmitting}
-                  />
-                  <span className="admin-form-hint">
-                    This explanation will be displayed to clients on the request form.
-                  </span>
                 </div>
 
                 <label className="admin-checkbox-label">

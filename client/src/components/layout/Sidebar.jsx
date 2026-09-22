@@ -1,7 +1,8 @@
 import { NavLink } from 'react-router-dom';
-import { FolderKanban, ShieldCheck } from 'lucide-react';
+import { ClipboardList, FolderKanban, ShieldCheck } from 'lucide-react';
 
 const NAV_ITEMS = [
+  { to: '/admin/orders', icon: ClipboardList, label: 'Orders' },
   { to: '/admin/catalog', icon: FolderKanban, label: 'Catalog' },
 ];
 
