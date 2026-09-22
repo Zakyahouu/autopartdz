@@ -14,7 +14,7 @@ export default function LoginPage() {
 
   // If already logged in as admin, redirect immediately
   useEffect(() => {
-    if (user?.role === 'admin') navigate('/admin/document-types', { replace: true });
+    if (user?.role === 'admin') navigate('/admin/catalog', { replace: true });
   }, [user, navigate]);
 
   const handleSubmit = async (e) => {

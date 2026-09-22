@@ -57,16 +57,19 @@ function validatePricing(hasTranslation, pricing) {
 router.post('/', async (req, res) => {
   try {
     const {
-      shortName, fullName, description, code, category, originLanguage,
+      name, shortName, fullName, description, code, category, originLanguage,
       hasTranslation, pricing, defaultSource, estimatedTurnaroundDays,
       sortOrder, slug,
     } = req.body;
 
-    if (!shortName?.trim() || !fullName?.trim() || !defaultSource) {
-      return res.status(400).json({ error: 'shortName, fullName, and defaultSource are required.' });
+    const resolvedName = (name || shortName || '').trim();
+    const resolvedFullName = (fullName || resolvedName).trim();
+
+    if (!resolvedName || !defaultSource) {
+      return res.status(400).json({ error: 'Document name and defaultSource are required.' });
     }
-    if (!['local', 'china'].includes(defaultSource)) {
-      return res.status(400).json({ error: 'defaultSource must be "local" or "china".' });
+    if (!['local', 'china', 'mixed'].includes(defaultSource)) {
+      return res.status(400).json({ error: 'defaultSource must be "local", "china", or "mixed".' });
     }
     if (pricing?.originalOnly?.clientPrice == null || pricing?.originalOnly?.costPrice == null) {
       return res.status(400).json({ error: 'pricing.originalOnly (clientPrice + costPrice) is required.' });
@@ -76,21 +79,25 @@ router.post('/', async (req, res) => {
     const pricingError = validatePricing(hasTranslation, pricing);
     if (pricingError) return res.status(400).json(pricingError);
 
-    // Slug
+    // Slug: auto-generate from name if omitted
     let finalSlug = slug?.trim().toLowerCase();
-    if (!finalSlug) finalSlug = slugify(shortName.trim());
-    if (!finalSlug) {
-      return res.status(400).json({ error: 'Could not generate a valid slug from the provided shortName.' });
-    }
+    if (!finalSlug) finalSlug = slugify(resolvedName);
+    if (!finalSlug) finalSlug = 'doc-' + Date.now();
+
+    // Check if slug is taken; if user explicitly provided it and collision occurs, report 409
     const slugConflict = await DocumentType.findOne({ slug: finalSlug });
     if (slugConflict) {
-      return res.status(409).json({ error: `Slug "${finalSlug}" is already in use. Choose a different shortName or provide a unique slug.` });
+      if (slug) {
+        return res.status(409).json({ error: `Slug "${finalSlug}" is already in use.` });
+      }
+      // Auto-append timestamp for auto-generated slug so it never collides
+      finalSlug = `${finalSlug}-${Date.now().toString().slice(-4)}`;
     }
 
-    // Build the document — CRITICALLY: omit code entirely if not provided
+    // Build document
     const docData = {
-      shortName: shortName.trim(),
-      fullName: fullName.trim(),
+      shortName: resolvedName,
+      fullName: resolvedFullName,
       description: description?.trim() || '',
       category: category?.trim() || '',
       originLanguage: originLanguage?.trim() || '',
@@ -254,6 +261,12 @@ router.patch('/:id', async (req, res) => {
     }
 
     // ── Scalar fields ─────────────────────────────────────────────────────────
+    if (req.body.name !== undefined) {
+      updates.shortName = req.body.name.trim();
+      if (!doc.fullName || doc.fullName === doc.shortName) {
+        updates.fullName = req.body.name.trim();
+      }
+    }
     if (shortName !== undefined) updates.shortName = shortName.trim();
     if (fullName !== undefined) updates.fullName = fullName.trim();
     if (description !== undefined) updates.description = description.trim();
@@ -261,8 +274,8 @@ router.patch('/:id', async (req, res) => {
     if (originLanguage !== undefined) updates.originLanguage = originLanguage.trim();
     if (hasTranslation !== undefined) updates.hasTranslation = Boolean(hasTranslation);
     if (defaultSource !== undefined) {
-      if (!['local', 'china'].includes(defaultSource)) {
-        return res.status(400).json({ error: 'defaultSource must be "local" or "china".' });
+      if (!['local', 'china', 'mixed'].includes(defaultSource)) {
+        return res.status(400).json({ error: 'defaultSource must be "local", "china", or "mixed".' });
       }
       updates.defaultSource = defaultSource;
     }

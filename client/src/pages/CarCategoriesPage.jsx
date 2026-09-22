@@ -10,7 +10,6 @@ import {
   CircleDot,
   X,
   AlertCircle,
-  Layers,
   FileText,
 } from 'lucide-react';
 
@@ -21,7 +20,7 @@ const EMPTY_FORM = {
   requiredDocumentTypes: [],
 };
 
-export default function CarCategoriesPage() {
+export default function CarCategoriesPage({ onCountChange }) {
   const [categories, setCategories] = useState([]);
   const [docTypes, setDocTypes] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -33,6 +32,8 @@ export default function CarCategoriesPage() {
   const [formError, setFormError] = useState('');
   const [formSubmitting, setFormSubmitting] = useState(false);
   const [actionLoadingId, setActionLoadingId] = useState(null);
+  const [docFilterQuery, setDocFilterQuery] = useState('');
+  const [expandedDocRowId, setExpandedDocRowId] = useState(null);
 
   const loadData = async () => {
     setLoading(true);
@@ -43,6 +44,7 @@ export default function CarCategoriesPage() {
 
     if (catRes.ok && Array.isArray(catRes.data)) {
       setCategories(catRes.data);
+      if (onCountChange) onCountChange(catRes.data.length);
     }
     if (docRes.ok && Array.isArray(docRes.data)) {
       setDocTypes(docRes.data);
@@ -78,10 +80,28 @@ export default function CarCategoriesPage() {
     return docTypes.filter((d) => d.active || currentAttachedIds.has(d._id));
   }, [docTypes, editingCategory]);
 
+  // Filtered documents inside the modal checklist
+  const modalFilteredDocs = useMemo(() => {
+    if (!docFilterQuery.trim()) return availableDocTypes;
+    const q = docFilterQuery.toLowerCase();
+    return availableDocTypes.filter((d) =>
+      (d.shortName && d.shortName.toLowerCase().includes(q)) ||
+      (d.code && d.code.toLowerCase().includes(q))
+    );
+  }, [availableDocTypes, docFilterQuery]);
+
+  // Map of doc ID to doc details for rendering table chips
+  const docTypeMap = useMemo(() => {
+    const map = new Map();
+    docTypes.forEach((d) => map.set(d._id, d));
+    return map;
+  }, [docTypes]);
+
   const openCreateModal = () => {
     setEditingCategory(null);
     setFormData(EMPTY_FORM);
     setFormError('');
+    setDocFilterQuery('');
     setModalOpen(true);
   };
 
@@ -101,6 +121,7 @@ export default function CarCategoriesPage() {
       requiredDocumentTypes: selectedIds,
     });
     setFormError('');
+    setDocFilterQuery('');
     setModalOpen(true);
   };
 
@@ -108,6 +129,7 @@ export default function CarCategoriesPage() {
     if (formSubmitting) return;
     setModalOpen(false);
     setEditingCategory(null);
+    setDocFilterQuery('');
   };
 
   const handleToggleActive = async (cat) => {
@@ -183,14 +205,24 @@ export default function CarCategoriesPage() {
 
   return (
     <div>
-      {/* Page Header */}
-      <div className="admin-page-header">
+      {/* Action Header */}
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        marginBottom: 20,
+        flexWrap: 'wrap',
+        gap: 12,
+      }}>
         <div>
-          <h1 className="admin-page-title">Car Categories</h1>
-          <p className="admin-page-subtitle">
-            Classifications and required customs documentation profiles for vehicle imports.
+          <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--admin-text-primary)' }}>
+            Vehicle Import Categories
+          </h2>
+          <p style={{ fontSize: 13, color: 'var(--admin-text-secondary)', marginTop: 2 }}>
+            Define vehicle types and their required customs documentation profiles (auto-checked for clients).
           </p>
         </div>
+
         <button
           type="button"
           className="btn-admin-primary"
@@ -233,11 +265,11 @@ export default function CarCategoriesPage() {
         <table className="admin-table">
           <thead>
             <tr>
-              <th>Category Name</th>
-              <th>Description / Scope</th>
-              <th className="align-center" style={{ width: 140 }}>Required Docs</th>
-              <th className="align-center" style={{ width: 110 }}>Status</th>
-              <th className="align-right" style={{ width: 90 }}>Actions</th>
+              <th style={{ width: '22%' }}>Category Name</th>
+              <th style={{ width: '28%' }}>Description / Notes</th>
+              <th>Required Documents</th>
+              <th className="align-center" style={{ width: 100 }}>Status</th>
+              <th className="align-right" style={{ width: 85 }}>Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -258,9 +290,13 @@ export default function CarCategoriesPage() {
               </tr>
             ) : (
               filteredCategories.map((cat) => {
-                const count = Array.isArray(cat.requiredDocumentTypes)
-                  ? cat.requiredDocumentTypes.length
-                  : 0;
+                const docIds = Array.isArray(cat.requiredDocumentTypes)
+                  ? cat.requiredDocumentTypes.map((d) => (typeof d === 'object' ? d._id : d))
+                  : [];
+
+                const isExpanded = expandedDocRowId === cat._id;
+                const displayDocs = isExpanded ? docIds : docIds.slice(0, 4);
+                const hasMore = docIds.length > 4;
 
                 return (
                   <tr key={cat._id} style={{ opacity: cat.active ? 1 : 0.65 }}>
@@ -272,11 +308,41 @@ export default function CarCategoriesPage() {
                     <td style={{ color: 'var(--admin-text-secondary)', fontSize: 13 }}>
                       {cat.description || <span style={{ color: 'var(--admin-text-muted)' }}>—</span>}
                     </td>
-                    <td className="align-center">
-                      <span className="admin-status" style={{ fontWeight: 500 }}>
-                        <FileText size={12} />
-                        <span>{count} {count === 1 ? 'doc' : 'docs'}</span>
-                      </span>
+                    <td>
+                      {docIds.length === 0 ? (
+                        <span style={{ color: 'var(--admin-text-muted)', fontSize: 12 }}>No required docs</span>
+                      ) : (
+                        <div className="admin-chips-wrap">
+                          {displayDocs.map((id) => {
+                            const d = docTypeMap.get(id);
+                            const label = d?.code || d?.shortName || id.slice(-4);
+                            return (
+                              <span key={id} className="admin-doc-chip" title={d?.shortName || ''}>
+                                {label}
+                              </span>
+                            );
+                          })}
+                          {hasMore && !isExpanded && (
+                            <button
+                              type="button"
+                              className="admin-doc-chip more"
+                              onClick={() => setExpandedDocRowId(cat._id)}
+                              title="Click to view all required documents"
+                            >
+                              +{docIds.length - 4} more
+                            </button>
+                          )}
+                          {isExpanded && (
+                            <button
+                              type="button"
+                              className="admin-doc-chip more"
+                              onClick={() => setExpandedDocRowId(null)}
+                            >
+                              Show less
+                            </button>
+                          )}
+                        </div>
+                      )}
                     </td>
                     <td className="align-center">
                       <span className={`admin-status ${cat.active ? 'is-active' : 'is-inactive'}`}>
@@ -332,7 +398,13 @@ export default function CarCategoriesPage() {
           className="admin-modal-backdrop"
           onClick={(e) => { if (e.target === e.currentTarget) closeModal(); }}
         >
-          <div className="admin-modal-panel" role="dialog" aria-modal="true" aria-labelledby="cat-modal-title">
+          <div
+            className="admin-modal-panel"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="cat-modal-title"
+            style={{ width: 'min(720px, 100%)' }}
+          >
             <div className="admin-modal-header">
               <h2 id="cat-modal-title" className="admin-modal-title">
                 {editingCategory ? 'Edit Car Category' : 'Create Car Category'}
@@ -365,7 +437,7 @@ export default function CarCategoriesPage() {
                     id="cat-name"
                     type="text"
                     className="admin-input"
-                    placeholder="e.g. Passenger Vehicles (M1), Commercial"
+                    placeholder="e.g. Passenger Vehicles (M1), Commercial Vans (N1)"
                     value={formData.name}
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                     required
@@ -380,7 +452,7 @@ export default function CarCategoriesPage() {
                   <textarea
                     id="cat-description"
                     className="admin-textarea"
-                    placeholder="Customs classification notes, engine capacity specifications…"
+                    placeholder="Notes for clients regarding vehicle engine limits or customs classifications…"
                     value={formData.description}
                     onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                     disabled={formSubmitting}
@@ -394,10 +466,10 @@ export default function CarCategoriesPage() {
                     onChange={(e) => setFormData({ ...formData, active: e.target.checked })}
                     disabled={formSubmitting}
                   />
-                  <span>Active in Catalog</span>
+                  <span>Active in Catalog (Available for clients to select)</span>
                 </label>
 
-                {/* Required Documents Checklist */}
+                {/* Scalable Multi-Column Required Documents Checklist */}
                 <div>
                   <div style={{
                     display: 'flex',
@@ -406,69 +478,73 @@ export default function CarCategoriesPage() {
                     marginBottom: 6,
                   }}>
                     <label className="admin-form-label" style={{ marginBottom: 0 }}>
-                      Required Documents
+                      Required Documents ({formData.requiredDocumentTypes.length} selected)
                     </label>
-                    <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--admin-text-secondary)' }}>
-                      {formData.requiredDocumentTypes.length} selected
+                    <span style={{ fontSize: 12, color: 'var(--admin-text-secondary)', fontWeight: 500 }}>
+                      Auto-selected for client on import request
                     </span>
                   </div>
-                  <span className="admin-form-hint" style={{ display: 'block', marginBottom: 10 }}>
-                    Select all official documents required when clearing this category through Algerian customs.
-                  </span>
 
-                  <div style={{
-                    border: '1px solid var(--admin-border)',
-                    borderRadius: 'var(--admin-radius)',
-                    maxHeight: 260,
-                    overflowY: 'auto',
-                    background: 'var(--admin-surface)',
-                  }}>
-                    {availableDocTypes.length === 0 ? (
-                      <div style={{ padding: 16, color: 'var(--admin-text-muted)', fontSize: 13, textAlign: 'center' }}>
-                        No active document types available to select.
+                  {/* Filter inside checklist */}
+                  <div style={{ position: 'relative', marginBottom: 10 }}>
+                    <Search size={14} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--admin-text-muted)' }} />
+                    <input
+                      type="search"
+                      className="admin-input"
+                      style={{ height: 32, paddingLeft: 30, fontSize: 12.5 }}
+                      placeholder="Filter documents checklist…"
+                      value={docFilterQuery}
+                      onChange={(e) => setDocFilterQuery(e.target.value)}
+                    />
+                  </div>
+
+                  {/* 2-Column Responsive Grid */}
+                  <div className="admin-checklist-grid">
+                    {modalFilteredDocs.length === 0 ? (
+                      <div style={{ gridColumn: '1 / -1', padding: 20, textAlign: 'center', color: 'var(--admin-text-muted)', fontSize: 13 }}>
+                        No matching documents found.
                       </div>
                     ) : (
-                      availableDocTypes.map((doc) => {
+                      modalFilteredDocs.map((doc) => {
                         const isChecked = formData.requiredDocumentTypes.includes(doc._id);
                         return (
-                          <label
+                          <div
                             key={doc._id}
-                            style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: 12,
-                              padding: '10px 14px',
-                              borderBottom: '1px solid var(--admin-border-subtle)',
-                              cursor: 'pointer',
-                              background: isChecked ? 'var(--admin-surface-subtle)' : 'transparent',
-                              transition: 'background-color 0.12s ease',
-                            }}
+                            className={`admin-checklist-card ${isChecked ? 'selected' : ''}`}
+                            onClick={() => handleDocTypeToggle(doc._id)}
                           >
                             <input
                               type="checkbox"
                               checked={isChecked}
-                              onChange={() => handleDocTypeToggle(doc._id)}
+                              onChange={() => {}} // Handled by card click
                               disabled={formSubmitting}
-                              style={{ accentColor: 'var(--admin-accent)', width: 16, height: 16 }}
+                              style={{ accentColor: 'var(--admin-accent)', marginTop: 2 }}
                             />
-                            <div style={{ flex: 1 }}>
-                              <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--admin-text-primary)' }}>
-                                {doc.shortName}
-                              </span>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+                                {doc.code ? (
+                                  <span className="admin-doc-chip" style={{ fontSize: 10.5, padding: '1px 5px' }}>
+                                    {doc.code}
+                                  </span>
+                                ) : null}
+                                <span style={{
+                                  fontSize: 12.5,
+                                  fontWeight: 600,
+                                  color: 'var(--admin-text-primary)',
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis',
+                                  whiteSpace: 'nowrap',
+                                }}>
+                                  {doc.shortName}
+                                </span>
+                              </div>
                               {!doc.active && (
-                                <span style={{ color: 'var(--admin-accent)', fontSize: 11, marginInlineStart: 6 }}>
-                                  (inactive)
+                                <span style={{ color: 'var(--admin-accent)', fontSize: 11 }}>
+                                  (inactive in catalog)
                                 </span>
                               )}
                             </div>
-                            <span style={{
-                              fontFamily: 'var(--admin-font-mono)',
-                              fontSize: 11.5,
-                              color: 'var(--admin-text-muted)',
-                            }}>
-                              {doc.code || '—'}
-                            </span>
-                          </label>
+                          </div>
                         );
                       })
                     )}

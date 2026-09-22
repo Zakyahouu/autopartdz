@@ -545,6 +545,127 @@ body {
   border-color: var(--status-blue-border);
 }
 
+.admin-status.is-mixed {
+  color: #7c3aed;
+  background: #f5f3ff;
+  border-color: #ddd6fe;
+}
+
+/* ── Catalog Hub Tabs ────────────────────────────────────────────── */
+.admin-tabs-nav {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-bottom: 1px solid var(--admin-border);
+  margin-bottom: 24px;
+}
+
+.admin-tab-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  font-family: var(--admin-font);
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--admin-text-secondary);
+  cursor: pointer;
+  margin-bottom: -1px;
+  transition: all 0.15s ease;
+}
+
+.admin-tab-btn:hover {
+  color: var(--admin-text-primary);
+}
+
+.admin-tab-btn.active {
+  color: var(--admin-accent);
+  font-weight: 600;
+  border-bottom-color: var(--admin-accent);
+}
+
+.admin-tab-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1px 7px;
+  border-radius: 9999px;
+  font-size: 11px;
+  font-weight: 600;
+  background: var(--admin-surface-hover);
+  color: var(--admin-text-secondary);
+}
+
+.admin-tab-btn.active .admin-tab-badge {
+  background: var(--admin-accent-tint);
+  color: var(--admin-accent);
+}
+
+/* ── Document Code Chips (In Tables) ─────────────────────────────── */
+.admin-chips-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+}
+
+.admin-doc-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 6px;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  font-family: var(--admin-font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  color: #334155;
+  white-space: nowrap;
+}
+
+.admin-doc-chip.more {
+  background: #f8fafc;
+  color: #64748b;
+  font-family: var(--admin-font);
+  font-size: 10.5px;
+  cursor: pointer;
+}
+
+/* ── Scalable Checklist (2-Column Grid) ───────────────────────────── */
+.admin-checklist-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 8px;
+  max-height: 280px;
+  overflow-y: auto;
+  padding: 4px;
+}
+
+.admin-checklist-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  background: var(--admin-surface);
+  border: 1px solid var(--admin-border);
+  border-radius: var(--admin-radius);
+  cursor: pointer;
+  transition: all 0.12s ease;
+}
+
+.admin-checklist-card:hover {
+  background: var(--admin-surface-hover);
+  border-color: var(--admin-border-input);
+}
+
+.admin-checklist-card.selected {
+  background: #f8fafc;
+  border-color: var(--admin-text-muted);
+}
+
 /* ── Forms & Controls ────────────────────────────────────────────── */
 .admin-form-group {
   display: flex;

@@ -17,8 +17,8 @@ const documentTypeSchema = new mongoose.Schema(
     },
     fullName: {
       type: String,
-      required: [true, 'Full name is required'],
       trim: true,
+      default: '',
     },
     description: {
       type: String,
@@ -60,7 +60,7 @@ const documentTypeSchema = new mongoose.Schema(
     },
     defaultSource: {
       type: String,
-      enum: ['local', 'china'],
+      enum: ['local', 'china', 'mixed'],
       required: [true, 'Default source is required'],
     },
     estimatedTurnaroundDays: {
@@ -73,7 +73,6 @@ const documentTypeSchema = new mongoose.Schema(
     },
     slug: {
       type: String,
-      unique: true,
       trim: true,
       lowercase: true,
     },

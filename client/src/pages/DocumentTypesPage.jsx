@@ -11,22 +11,19 @@ import {
   UploadCloud,
   X,
   AlertCircle,
-  FileText,
   MapPin,
   Globe,
+  Shuffle,
   ImageIcon,
 } from 'lucide-react';
 
 const EMPTY_FORM = {
-  shortName: '',
-  fullName: '',
+  name: '',
   code: '',
-  slug: '',
   category: '',
-  originLanguage: '',
+  originLanguage: 'Chinese',
   defaultSource: 'local',
   estimatedTurnaroundDays: '',
-  sortOrder: 0,
   description: '',
   active: true,
   hasTranslation: false,
@@ -37,7 +34,7 @@ const EMPTY_FORM = {
   },
 };
 
-export default function DocumentTypesPage() {
+export default function DocumentTypesPage({ onCountChange }) {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filterStatus, setFilterStatus] = useState('all'); // all | active | inactive
@@ -60,6 +57,7 @@ export default function DocumentTypesPage() {
     const { ok, data } = await apiFetch('/document-types');
     if (ok && Array.isArray(data)) {
       setItems(data);
+      if (onCountChange) onCountChange(data.length);
     }
     setLoading(false);
   };
@@ -115,15 +113,12 @@ export default function DocumentTypesPage() {
   const openEditModal = async (item) => {
     setEditingItem(item);
     setFormData({
-      shortName: item.shortName || '',
-      fullName: item.fullName || '',
+      name: item.shortName || item.fullName || '',
       code: item.code || '',
-      slug: item.slug || '',
       category: item.category || '',
-      originLanguage: item.originLanguage || '',
+      originLanguage: item.originLanguage || 'Chinese',
       defaultSource: item.defaultSource || 'local',
       estimatedTurnaroundDays: item.estimatedTurnaroundDays ?? '',
-      sortOrder: item.sortOrder ?? 0,
       description: item.description || '',
       active: item.active !== false,
       hasTranslation: Boolean(item.hasTranslation),
@@ -195,12 +190,9 @@ export default function DocumentTypesPage() {
     e.preventDefault();
     setFormError('');
 
-    if (!formData.shortName.trim()) {
-      setFormError('Short name is required.');
-      return;
-    }
-    if (!formData.fullName.trim()) {
-      setFormError('Full name is required.');
+    const trimmedName = formData.name.trim();
+    if (!trimmedName) {
+      setFormError('Document name is required.');
       return;
     }
     if (
@@ -226,15 +218,15 @@ export default function DocumentTypesPage() {
     setFormSubmitting(true);
 
     const payload = {
-      shortName: formData.shortName.trim(),
-      fullName: formData.fullName.trim(),
+      name: trimmedName,
+      shortName: trimmedName,
+      fullName: trimmedName,
       description: formData.description.trim(),
       category: formData.category.trim(),
       originLanguage: formData.originLanguage.trim(),
       defaultSource: formData.defaultSource,
       hasTranslation: formData.hasTranslation,
       active: formData.active,
-      sortOrder: Number(formData.sortOrder) || 0,
       pricing: {
         originalOnly: {
           clientPrice: Number(formData.pricing.originalOnly.clientPrice),
@@ -247,10 +239,6 @@ export default function DocumentTypesPage() {
       payload.estimatedTurnaroundDays = Number(formData.estimatedTurnaroundDays);
     } else {
       payload.estimatedTurnaroundDays = null;
-    }
-
-    if (formData.slug.trim()) {
-      payload.slug = formData.slug.trim().toLowerCase();
     }
 
     const trimmedCode = formData.code.trim();
@@ -301,7 +289,7 @@ export default function DocumentTypesPage() {
     if (selectedFile && savedDoc?._id) {
       const uploadRes = await apiUpload(`/document-types/${savedDoc._id}/example-image`, selectedFile);
       if (!uploadRes.ok) {
-        alert(`Document type saved, but image upload failed: ${uploadRes.data?.error || 'Upload error'}`);
+        alert(`Document saved, but image upload failed: ${uploadRes.data?.error || 'Upload error'}`);
       } else {
         savedDoc.exampleImageFileId = uploadRes.data?.fileId;
       }
@@ -314,14 +302,24 @@ export default function DocumentTypesPage() {
 
   return (
     <div>
-      {/* Page Header */}
-      <div className="admin-page-header">
+      {/* Action Header */}
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        marginBottom: 20,
+        flexWrap: 'wrap',
+        gap: 12,
+      }}>
         <div>
-          <h1 className="admin-page-title">Document Types</h1>
-          <p className="admin-page-subtitle">
-            Catalog of official import documents, pricing tiers, and sourcing defaults.
+          <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--admin-text-primary)' }}>
+            Official Import Documents
+          </h2>
+          <p style={{ fontSize: 13, color: 'var(--admin-text-secondary)', marginTop: 2 }}>
+            Manage documents, supplier sourcing defaults, client descriptions, and pricing tiers.
           </p>
         </div>
+
         <button
           type="button"
           className="btn-admin-primary"
@@ -364,7 +362,7 @@ export default function DocumentTypesPage() {
         <table className="admin-table">
           <thead>
             <tr>
-              <th style={{ width: 80 }}>Code</th>
+              <th style={{ width: 85 }}>Code</th>
               <th>Document Name</th>
               <th>Category</th>
               <th>Default Source</th>
@@ -393,20 +391,36 @@ export default function DocumentTypesPage() {
               filteredItems.map((item) => (
                 <tr key={item._id} style={{ opacity: item.active ? 1 : 0.65 }}>
                   <td className="mono">
-                    {item.code || <span style={{ color: 'var(--admin-text-muted)' }}>—</span>}
+                    {item.code ? (
+                      <span className="admin-doc-chip" style={{ fontSize: 12 }}>
+                        {item.code}
+                      </span>
+                    ) : (
+                      <span style={{ color: 'var(--admin-text-muted)' }}>—</span>
+                    )}
                   </td>
                   <td>
                     <div style={{ fontWeight: 600, color: 'var(--admin-text-primary)' }}>
-                      {item.shortName}
+                      {item.shortName || item.fullName}
                     </div>
-                    <div style={{ fontSize: 12, color: 'var(--admin-text-secondary)', marginTop: 1 }}>
-                      {item.fullName}
-                      {item.hasTranslation && (
-                        <span style={{ marginInlineStart: 8, color: 'var(--status-amber-text)', fontWeight: 500 }}>
-                          • Includes translation
-                        </span>
-                      )}
-                    </div>
+                    {item.description ? (
+                      <div style={{
+                        fontSize: 12,
+                        color: 'var(--admin-text-secondary)',
+                        marginTop: 2,
+                        maxWidth: 360,
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}>
+                        {item.description}
+                      </div>
+                    ) : null}
+                    {item.hasTranslation && (
+                      <span style={{ fontSize: 11.5, color: 'var(--status-amber-text)', fontWeight: 500, display: 'inline-block', marginTop: 2 }}>
+                        • Chinese translation available
+                      </span>
+                    )}
                   </td>
                   <td>
                     {item.category ? (
@@ -421,12 +435,17 @@ export default function DocumentTypesPage() {
                     {item.defaultSource === 'local' ? (
                       <span className="admin-status is-local">
                         <MapPin size={12} />
-                        <span>Local (Algeria)</span>
+                        <span>Algeria (Print)</span>
                       </span>
-                    ) : (
+                    ) : item.defaultSource === 'china' ? (
                       <span className="admin-status is-china">
                         <Globe size={12} />
-                        <span>China</span>
+                        <span>China (Shipped)</span>
+                      </span>
+                    ) : (
+                      <span className="admin-status is-mixed">
+                        <Shuffle size={12} />
+                        <span>Mixed / Depends</span>
                       </span>
                     )}
                   </td>
@@ -529,33 +548,34 @@ export default function DocumentTypesPage() {
                   </div>
                 )}
 
-                {/* Primary Identifiers */}
+                {/* Primary Name & Customs Code */}
                 <div className="admin-form-grid">
                   <div className="admin-form-group">
-                    <label className="admin-form-label" htmlFor="doc-shortName">
-                      Short Name <span className="required">*</span>
+                    <label className="admin-form-label" htmlFor="doc-name">
+                      Document Name <span className="required">*</span>
                     </label>
                     <input
-                      id="doc-shortName"
+                      id="doc-name"
                       type="text"
                       className="admin-input"
                       placeholder="e.g. Certificate of Conformity"
-                      value={formData.shortName}
-                      onChange={(e) => setFormData({ ...formData, shortName: e.target.value })}
+                      value={formData.name}
+                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                       required
                       disabled={formSubmitting}
                     />
+                    <span className="admin-form-hint">Official title shown to clients.</span>
                   </div>
 
                   <div className="admin-form-group">
                     <label className="admin-form-label" htmlFor="doc-code">
-                      Code
+                      Customs Code
                     </label>
                     <input
                       id="doc-code"
                       type="text"
                       className="admin-input mono"
-                      placeholder="e.g. COC"
+                      placeholder="e.g. COC, CI, CO"
                       value={formData.code}
                       onChange={(e) => setFormData({ ...formData, code: e.target.value.toUpperCase() })}
                       disabled={formSubmitting || (Boolean(editingItem) && Boolean(editingItem.code))}
@@ -563,27 +583,12 @@ export default function DocumentTypesPage() {
                     <span className="admin-form-hint">
                       {editingItem?.code
                         ? 'Code is immutable once set and cannot be altered.'
-                        : 'Optional unique code. Immutable once saved.'}
+                        : 'Short abbreviation. Leave blank if none.'}
                     </span>
                   </div>
                 </div>
 
-                <div className="admin-form-group">
-                  <label className="admin-form-label" htmlFor="doc-fullName">
-                    Full Name <span className="required">*</span>
-                  </label>
-                  <input
-                    id="doc-fullName"
-                    type="text"
-                    className="admin-input"
-                    placeholder="Official full document title"
-                    value={formData.fullName}
-                    onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
-                    required
-                    disabled={formSubmitting}
-                  />
-                </div>
-
+                {/* Category & Default Sourcing */}
                 <div className="admin-form-grid">
                   <div className="admin-form-group">
                     <label className="admin-form-label" htmlFor="doc-category">
@@ -594,35 +599,17 @@ export default function DocumentTypesPage() {
                       type="text"
                       list="category-suggestions"
                       className="admin-input"
-                      placeholder="e.g. Customs, Technical"
+                      placeholder="e.g. Customs Clearance, Technical"
                       value={formData.category}
                       onChange={(e) => setFormData({ ...formData, category: e.target.value })}
                       disabled={formSubmitting}
                     />
-                    <span className="admin-form-hint">Select existing or type a new category.</span>
+                    <span className="admin-form-hint">Group for the client request form.</span>
                   </div>
 
-                  <div className="admin-form-group">
-                    <label className="admin-form-label" htmlFor="doc-slug">
-                      Slug
-                    </label>
-                    <input
-                      id="doc-slug"
-                      type="text"
-                      className="admin-input mono"
-                      placeholder="Auto-generated if blank"
-                      value={formData.slug}
-                      onChange={(e) => setFormData({ ...formData, slug: e.target.value.toLowerCase() })}
-                      disabled={formSubmitting}
-                    />
-                    <span className="admin-form-hint">Unique URL-friendly identifier.</span>
-                  </div>
-                </div>
-
-                <div className="admin-form-grid">
                   <div className="admin-form-group">
                     <label className="admin-form-label" htmlFor="doc-defaultSource">
-                      Default Source <span className="required">*</span>
+                      Default Sourcing <span className="required">*</span>
                     </label>
                     <select
                       id="doc-defaultSource"
@@ -631,31 +618,36 @@ export default function DocumentTypesPage() {
                       onChange={(e) => setFormData({ ...formData, defaultSource: e.target.value })}
                       disabled={formSubmitting}
                     >
-                      <option value="local">Local (Algeria office)</option>
-                      <option value="china">China (Supplier / Partner)</option>
+                      <option value="local">Algeria (Office Print)</option>
+                      <option value="china">China (Shipped from Partner)</option>
+                      <option value="mixed">Mixed / Depends on Vehicle</option>
                     </select>
                   </div>
+                </div>
 
+                {/* Language & Turnaround */}
+                <div className="admin-form-grid">
                   <div className="admin-form-group">
                     <label className="admin-form-label" htmlFor="doc-originLanguage">
                       Origin Language
                     </label>
-                    <input
+                    <select
                       id="doc-originLanguage"
-                      type="text"
-                      className="admin-input"
-                      placeholder="e.g. Chinese, French"
+                      className="admin-select"
                       value={formData.originLanguage}
                       onChange={(e) => setFormData({ ...formData, originLanguage: e.target.value })}
                       disabled={formSubmitting}
-                    />
+                    >
+                      <option value="Chinese">Chinese</option>
+                      <option value="English">English</option>
+                      <option value="French">French</option>
+                      <option value="Other">Other</option>
+                    </select>
                   </div>
-                </div>
 
-                <div className="admin-form-grid">
                   <div className="admin-form-group">
                     <label className="admin-form-label" htmlFor="doc-turnaround">
-                      Est. Turnaround (Days)
+                      Est. Turnaround Time (Days)
                     </label>
                     <input
                       id="doc-turnaround"
@@ -668,34 +660,24 @@ export default function DocumentTypesPage() {
                       disabled={formSubmitting}
                     />
                   </div>
-
-                  <div className="admin-form-group">
-                    <label className="admin-form-label" htmlFor="doc-sortOrder">
-                      Sort Order
-                    </label>
-                    <input
-                      id="doc-sortOrder"
-                      type="number"
-                      className="admin-input"
-                      value={formData.sortOrder}
-                      onChange={(e) => setFormData({ ...formData, sortOrder: e.target.value })}
-                      disabled={formSubmitting}
-                    />
-                  </div>
                 </div>
 
+                {/* Client-facing Description */}
                 <div className="admin-form-group">
                   <label className="admin-form-label" htmlFor="doc-description">
-                    Description / Internal Notes
+                    Client Description / Instructions
                   </label>
                   <textarea
                     id="doc-description"
                     className="admin-textarea"
-                    placeholder="Internal guidance or customs filing notes…"
+                    placeholder="Explain what this document is and why Algerian customs requires it for import clearance…"
                     value={formData.description}
                     onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                     disabled={formSubmitting}
                   />
+                  <span className="admin-form-hint">
+                    This explanation will be displayed to clients on the request form.
+                  </span>
                 </div>
 
                 <label className="admin-checkbox-label">
@@ -705,7 +687,7 @@ export default function DocumentTypesPage() {
                     onChange={(e) => setFormData({ ...formData, active: e.target.checked })}
                     disabled={formSubmitting}
                   />
-                  <span>Active in Catalog</span>
+                  <span>Active in Catalog (Available for clients to request)</span>
                 </label>
 
                 {/* Pricing Section */}
@@ -720,7 +702,7 @@ export default function DocumentTypesPage() {
                 }}>
                   <div>
                     <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--admin-text-primary)', marginBottom: 8 }}>
-                      Standard Pricing (Original Only) <span className="required">*</span>
+                      Standard Pricing (Original Document) <span className="required">*</span>
                     </div>
                     <div className="admin-form-grid">
                       <div className="admin-form-group">

@@ -1,9 +1,8 @@
 import { NavLink } from 'react-router-dom';
-import { FileText, Layers, ShieldCheck } from 'lucide-react';
+import { FolderKanban, ShieldCheck } from 'lucide-react';
 
 const NAV_ITEMS = [
-  { to: '/admin/document-types', icon: FileText, label: 'Document Types' },
-  { to: '/admin/car-categories', icon: Layers, label: 'Car Categories' },
+  { to: '/admin/catalog', icon: FolderKanban, label: 'Catalog' },
 ];
 
 export default function Sidebar() {
@@ -23,7 +22,7 @@ export default function Sidebar() {
 
       {/* Navigation Links */}
       <nav className="admin-sidebar-nav">
-        <div className="admin-nav-section-label">Catalog</div>
+        <div className="admin-nav-section-label">Management</div>
         {NAV_ITEMS.map(({ to, icon: Icon, label }) => (
           <NavLink
             key={to}
