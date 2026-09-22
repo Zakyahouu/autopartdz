@@ -1,5 +1,6 @@
 const express = require('express');
 const DocumentType = require('../models/DocumentType');
+const CarCategory = require('../models/CarCategory');
 const File = require('../models/File');
 const { requireAuth, requireRole } = require('../middleware/auth');
 const { uploadSingle } = require('../middleware/fileSize');
@@ -344,4 +345,62 @@ router.post(
   }
 );
 
+// ── DELETE /api/document-types/:id (Soft-delete / Move to History) ─────────
+router.delete('/:id', async (req, res) => {
+  try {
+    const doc = await DocumentType.findByIdAndUpdate(
+      req.params.id,
+      { $set: { active: false } },
+      { new: true }
+    );
+    if (!doc) return res.status(404).json({ error: 'Document type not found.' });
+    return res.json({ message: 'Document moved to history.', doc });
+  } catch (err) {
+    console.error('[DELETE /api/document-types/:id]', err);
+    return res.status(500).json({ error: 'Server error moving document type to history.' });
+  }
+});
+
+// ── PATCH /api/document-types/:id/restore (Restore from History) ───────────
+router.patch('/:id/restore', async (req, res) => {
+  try {
+    const doc = await DocumentType.findByIdAndUpdate(
+      req.params.id,
+      { $set: { active: true } },
+      { new: true }
+    );
+    if (!doc) return res.status(404).json({ error: 'Document type not found.' });
+    return res.json({ message: 'Document restored.', doc });
+  } catch (err) {
+    console.error('[PATCH /api/document-types/:id/restore]', err);
+    return res.status(500).json({ error: 'Server error restoring document type.' });
+  }
+});
+
+// ── DELETE /api/document-types/:id/permanent (Permanent Delete) ─────────────
+router.delete('/:id/permanent', async (req, res) => {
+  try {
+    const doc = await DocumentType.findById(req.params.id);
+    if (!doc) return res.status(404).json({ error: 'Document type not found.' });
+
+    // Clean up reference in CarCategory if any
+    await CarCategory.updateMany(
+      { requiredDocumentTypes: doc._id },
+      { $pull: { requiredDocumentTypes: doc._id } }
+    );
+
+    // Clean up example image file if exists
+    if (doc.exampleImageFileId) {
+      await File.findByIdAndDelete(doc.exampleImageFileId).catch(() => {});
+    }
+
+    await DocumentType.findByIdAndDelete(doc._id);
+    return res.json({ message: 'Document permanently deleted.', id: doc._id });
+  } catch (err) {
+    console.error('[DELETE /api/document-types/:id/permanent]', err);
+    return res.status(500).json({ error: 'Server error permanently deleting document type.' });
+  }
+});
+
 module.exports = router;
+

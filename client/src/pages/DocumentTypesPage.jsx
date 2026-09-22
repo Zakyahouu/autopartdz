@@ -4,8 +4,8 @@ import {
   Plus,
   Search,
   Pencil,
-  Power,
-  PowerOff,
+  Trash2,
+  RotateCcw,
   CheckCircle2,
   CircleDot,
   UploadCloud,
@@ -15,6 +15,8 @@ import {
   Globe,
   Shuffle,
   ImageIcon,
+  History,
+  AlertTriangle,
 } from 'lucide-react';
 
 const EMPTY_FORM = {
@@ -37,7 +39,7 @@ const EMPTY_FORM = {
 export default function DocumentTypesPage({ onCountChange }) {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [filterStatus, setFilterStatus] = useState('all'); // all | active | inactive
+  const [viewMode, setViewMode] = useState('active'); // 'active' | 'history'
   const [search, setSearch] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
@@ -45,6 +47,13 @@ export default function DocumentTypesPage({ onCountChange }) {
   const [formError, setFormError] = useState('');
   const [formSubmitting, setFormSubmitting] = useState(false);
   const [actionLoadingId, setActionLoadingId] = useState(null);
+
+  // Confirmation modal state
+  const [confirmModal, setConfirmModal] = useState({
+    open: false,
+    type: 'archive', // 'archive' | 'permanent'
+    item: null,
+  });
 
   // File upload state
   const [selectedFile, setSelectedFile] = useState(null);
@@ -57,7 +66,8 @@ export default function DocumentTypesPage({ onCountChange }) {
     const { ok, data } = await apiFetch('/document-types');
     if (ok && Array.isArray(data)) {
       setItems(data);
-      if (onCountChange) onCountChange(data.length);
+      const activeCount = data.filter((d) => d.active).length;
+      if (onCountChange) onCountChange(activeCount);
     }
     setLoading(false);
   };
@@ -76,20 +86,20 @@ export default function DocumentTypesPage({ onCountChange }) {
     return Array.from(set).sort();
   }, [items]);
 
-  const filteredItems = useMemo(() => {
-    return items.filter((item) => {
-      if (filterStatus === 'active' && !item.active) return false;
-      if (filterStatus === 'inactive' && item.active) return false;
-      if (search.trim()) {
-        const q = search.toLowerCase();
-        const matchCode = item.code?.toLowerCase().includes(q);
-        const matchName = item.shortName?.toLowerCase().includes(q) || item.fullName?.toLowerCase().includes(q);
-        const matchCategory = item.category?.toLowerCase().includes(q);
-        if (!matchCode && !matchName && !matchCategory) return false;
-      }
-      return true;
+  const activeItems = useMemo(() => items.filter((d) => d.active), [items]);
+  const historyItems = useMemo(() => items.filter((d) => !d.active), [items]);
+
+  const displayedItems = useMemo(() => {
+    const base = viewMode === 'active' ? activeItems : historyItems;
+    if (!search.trim()) return base;
+    const q = search.toLowerCase();
+    return base.filter((item) => {
+      const matchCode = item.code?.toLowerCase().includes(q);
+      const matchName = item.shortName?.toLowerCase().includes(q) || item.fullName?.toLowerCase().includes(q);
+      const matchCategory = item.category?.toLowerCase().includes(q);
+      return matchCode || matchName || matchCategory;
     });
-  }, [items, filterStatus, search]);
+  }, [viewMode, activeItems, historyItems, search]);
 
   useEffect(() => {
     return () => {
@@ -171,18 +181,49 @@ export default function DocumentTypesPage({ onCountChange }) {
     setImagePreviewUrl(URL.createObjectURL(file));
   };
 
-  const handleToggleActive = async (item) => {
+  // Move to history (soft delete)
+  const handleArchive = async (item) => {
     setActionLoadingId(item._id);
-    const newActive = !item.active;
     const { ok, data } = await apiFetch(`/document-types/${item._id}`, {
+      method: 'DELETE',
+    });
+    setActionLoadingId(null);
+    setConfirmModal({ open: false, type: 'archive', item: null });
+    if (ok) {
+      setItems((prev) => prev.map((doc) => (doc._id === item._id ? { ...doc, active: false } : doc)));
+      if (onCountChange) onCountChange(activeItems.length - 1);
+    } else {
+      alert(data.error || 'Failed to move document to history.');
+    }
+  };
+
+  // Restore from history
+  const handleRestore = async (item) => {
+    setActionLoadingId(item._id);
+    const { ok, data } = await apiFetch(`/document-types/${item._id}/restore`, {
       method: 'PATCH',
-      body: JSON.stringify({ active: newActive }),
     });
     setActionLoadingId(null);
     if (ok) {
-      setItems((prev) => prev.map((doc) => (doc._id === item._id ? data : doc)));
+      setItems((prev) => prev.map((doc) => (doc._id === item._id ? { ...doc, active: true } : doc)));
+      if (onCountChange) onCountChange(activeItems.length + 1);
     } else {
-      alert(data.error || 'Failed to update active state.');
+      alert(data.error || 'Failed to restore document.');
+    }
+  };
+
+  // Permanent delete
+  const handlePermanentDelete = async (item) => {
+    setActionLoadingId(item._id);
+    const { ok, data } = await apiFetch(`/document-types/${item._id}/permanent`, {
+      method: 'DELETE',
+    });
+    setActionLoadingId(null);
+    setConfirmModal({ open: false, type: 'permanent', item: null });
+    if (ok) {
+      setItems((prev) => prev.filter((doc) => doc._id !== item._id));
+    } else {
+      alert(data.error || 'Failed to permanently delete document.');
     }
   };
 
@@ -302,12 +343,12 @@ export default function DocumentTypesPage({ onCountChange }) {
 
   return (
     <div>
-      {/* Action Header */}
+      {/* Sub-Header & Primary Action */}
       <div style={{
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
-        marginBottom: 20,
+        marginBottom: 16,
         flexWrap: 'wrap',
         gap: 12,
       }}>
@@ -316,33 +357,62 @@ export default function DocumentTypesPage({ onCountChange }) {
             Official Import Documents
           </h2>
           <p style={{ fontSize: 13, color: 'var(--admin-text-secondary)', marginTop: 2 }}>
-            Manage documents, supplier sourcing defaults, client descriptions, and pricing tiers.
+            Manage official import documents, pricing tiers, and client instructions.
           </p>
         </div>
 
-        <button
-          type="button"
-          className="btn-admin-primary"
-          onClick={openCreateModal}
-        >
-          <Plus size={16} />
-          <span>New Document Type</span>
-        </button>
+        {viewMode === 'active' && (
+          <button
+            type="button"
+            className="btn-admin-primary"
+            onClick={openCreateModal}
+          >
+            <Plus size={16} />
+            <span>New Document Type</span>
+          </button>
+        )}
       </div>
 
-      {/* Toolbar: Filters and Search */}
+      {/* View Switcher Tabs (Active vs History) & Search */}
       <div className="admin-toolbar">
         <div className="admin-filter-tabs">
-          {['all', 'active', 'inactive'].map((status) => (
-            <button
-              key={status}
-              type="button"
-              className={`admin-filter-tab ${filterStatus === status ? 'active' : ''}`}
-              onClick={() => setFilterStatus(status)}
-            >
-              {status}
-            </button>
-          ))}
+          <button
+            type="button"
+            className={`admin-filter-tab ${viewMode === 'active' ? 'active' : ''}`}
+            onClick={() => setViewMode('active')}
+          >
+            <span>Active Documents</span>
+            <span style={{
+              marginInlineStart: 6,
+              fontSize: 11,
+              padding: '1px 6px',
+              borderRadius: 9999,
+              background: viewMode === 'active' ? 'var(--admin-border)' : 'var(--admin-surface-hover)',
+            }}>
+              {activeItems.length}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            className={`admin-filter-tab ${viewMode === 'history' ? 'active' : ''}`}
+            onClick={() => setViewMode('history')}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}
+          >
+            <History size={13} />
+            <span>History / Archive</span>
+            {historyItems.length > 0 && (
+              <span style={{
+                marginInlineStart: 4,
+                fontSize: 11,
+                padding: '1px 6px',
+                borderRadius: 9999,
+                background: viewMode === 'history' ? 'var(--admin-border)' : 'var(--admin-surface-hover)',
+              }}>
+                {historyItems.length}
+              </span>
+            )}
+          </button>
         </div>
 
         <div className="admin-search-wrapper">
@@ -357,6 +427,27 @@ export default function DocumentTypesPage({ onCountChange }) {
         </div>
       </div>
 
+      {/* History Notice Banner */}
+      {viewMode === 'history' && (
+        <div style={{
+          padding: '10px 14px',
+          background: '#f8fafc',
+          border: '1px solid var(--admin-border)',
+          borderRadius: 'var(--admin-radius)',
+          fontSize: 12.5,
+          color: 'var(--admin-text-secondary)',
+          marginBottom: 16,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+        }}>
+          <History size={14} style={{ color: 'var(--admin-text-muted)' }} />
+          <span>
+            These documents have been removed from the active catalog. You can restore them anytime or permanently delete them from the database.
+          </span>
+        </div>
+      )}
+
       {/* Data Table */}
       <div className="admin-card">
         <table className="admin-table">
@@ -367,8 +458,8 @@ export default function DocumentTypesPage({ onCountChange }) {
               <th>Category</th>
               <th>Default Source</th>
               <th className="align-right">Client Price</th>
-              <th className="align-center" style={{ width: 110 }}>Status</th>
-              <th className="align-right" style={{ width: 90 }}>Actions</th>
+              <th className="align-center" style={{ width: 100 }}>Status</th>
+              <th className="align-right" style={{ width: viewMode === 'active' ? 90 : 130 }}>Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -381,15 +472,17 @@ export default function DocumentTypesPage({ onCountChange }) {
                   </div>
                 </td>
               </tr>
-            ) : filteredItems.length === 0 ? (
+            ) : displayedItems.length === 0 ? (
               <tr>
                 <td colSpan="7" className="admin-table-empty">
-                  No document types found.
+                  {viewMode === 'active'
+                    ? 'No active document types found.'
+                    : 'History is empty. No archived documents.'}
                 </td>
               </tr>
             ) : (
-              filteredItems.map((item) => (
-                <tr key={item._id} style={{ opacity: item.active ? 1 : 0.65 }}>
+              displayedItems.map((item) => (
+                <tr key={item._id} style={{ opacity: item.active ? 1 : 0.85 }}>
                   <td className="mono">
                     {item.code ? (
                       <span className="admin-doc-chip" style={{ fontSize: 12 }}>
@@ -470,38 +563,79 @@ export default function DocumentTypesPage({ onCountChange }) {
                       ) : (
                         <CircleDot size={12} strokeWidth={2.2} />
                       )}
-                      <span>{item.active ? 'Active' : 'Inactive'}</span>
+                      <span>{item.active ? 'Active' : 'Archived'}</span>
                     </span>
                   </td>
                   <td className="align-right">
-                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                      <button
-                        type="button"
-                        className="btn-admin-icon"
-                        aria-label={`Edit ${item.shortName}`}
-                        title="Edit document type"
-                        onClick={() => openEditModal(item)}
-                      >
-                        <Pencil size={14} />
-                      </button>
+                    {viewMode === 'active' ? (
+                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                        <button
+                          type="button"
+                          className="btn-admin-icon"
+                          aria-label={`Edit ${item.shortName}`}
+                          title="Edit document type"
+                          onClick={() => openEditModal(item)}
+                        >
+                          <Pencil size={14} />
+                        </button>
 
-                      <button
-                        type="button"
-                        className={`btn-admin-icon ${item.active ? 'danger' : ''}`}
-                        aria-label={item.active ? 'Deactivate document type' : 'Activate document type'}
-                        title={item.active ? 'Deactivate' : 'Activate'}
-                        onClick={() => handleToggleActive(item)}
-                        disabled={actionLoadingId === item._id}
-                      >
-                        {actionLoadingId === item._id ? (
-                          <span className="admin-spinner" style={{ width: 12, height: 12 }} />
-                        ) : item.active ? (
-                          <PowerOff size={14} />
-                        ) : (
-                          <Power size={14} />
-                        )}
-                      </button>
-                    </div>
+                        <button
+                          type="button"
+                          className="btn-admin-icon danger"
+                          aria-label={`Move ${item.shortName} to history`}
+                          title="Delete / Move to History"
+                          onClick={() =>
+                            setConfirmModal({
+                              open: true,
+                              type: 'archive',
+                              item,
+                            })
+                          }
+                          disabled={actionLoadingId === item._id}
+                        >
+                          {actionLoadingId === item._id ? (
+                            <span className="admin-spinner" style={{ width: 12, height: 12 }} />
+                          ) : (
+                            <Trash2 size={14} />
+                          )}
+                        </button>
+                      </div>
+                    ) : (
+                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                        <button
+                          type="button"
+                          className="btn-admin-secondary"
+                          style={{ height: 28, padding: '0 8px', fontSize: 11.5 }}
+                          title="Restore to active catalog"
+                          onClick={() => handleRestore(item)}
+                          disabled={actionLoadingId === item._id}
+                        >
+                          <RotateCcw size={12} />
+                          <span>Restore</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          className="btn-admin-icon danger"
+                          aria-label={`Permanently delete ${item.shortName}`}
+                          title="Delete permanently from database"
+                          onClick={() =>
+                            setConfirmModal({
+                              open: true,
+                              type: 'permanent',
+                              item,
+                            })
+                          }
+                          disabled={actionLoadingId === item._id}
+                        >
+                          {actionLoadingId === item._id ? (
+                            <span className="admin-spinner" style={{ width: 12, height: 12 }} />
+                          ) : (
+                            <Trash2 size={14} />
+                          )}
+                        </button>
+                      </div>
+                    )}
                   </td>
                 </tr>
               ))
@@ -516,6 +650,83 @@ export default function DocumentTypesPage({ onCountChange }) {
           <option key={cat} value={cat} />
         ))}
       </datalist>
+
+      {/* Confirmation Dialog (Archive vs Permanent Delete) */}
+      {confirmModal.open && (
+        <div
+          className="admin-modal-backdrop"
+          onClick={() => setConfirmModal({ open: false, type: 'archive', item: null })}
+        >
+          <div
+            className="admin-modal-panel"
+            role="alertdialog"
+            aria-modal="true"
+            style={{ width: 'min(440px, 100%)' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="admin-modal-header">
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                {confirmModal.type === 'permanent' ? (
+                  <AlertTriangle size={18} style={{ color: 'var(--admin-accent)' }} />
+                ) : (
+                  <Trash2 size={18} style={{ color: 'var(--admin-text-secondary)' }} />
+                )}
+                <h3 style={{ fontSize: 15, fontWeight: 600, color: 'var(--admin-text-primary)' }}>
+                  {confirmModal.type === 'permanent' ? 'Permanently Delete?' : 'Move to History?'}
+                </h3>
+              </div>
+              <button
+                type="button"
+                className="btn-admin-icon"
+                onClick={() => setConfirmModal({ open: false, type: 'archive', item: null })}
+              >
+                <X size={15} />
+              </button>
+            </div>
+
+            <div style={{ padding: '20px 24px', fontSize: 13.5, color: 'var(--admin-text-secondary)', lineHeight: 1.6 }}>
+              {confirmModal.type === 'permanent' ? (
+                <>
+                  Are you sure you want to permanently delete{' '}
+                  <strong style={{ color: 'var(--admin-text-primary)' }}>
+                    {confirmModal.item?.shortName || 'this document'}
+                  </strong>
+                  ? This will delete the document type and its sample image from the database completely. This action cannot be undone.
+                </>
+              ) : (
+                <>
+                  Move{' '}
+                  <strong style={{ color: 'var(--admin-text-primary)' }}>
+                    {confirmModal.item?.shortName || 'this document'}
+                  </strong>{' '}
+                  to the History tab? It will be removed from the active catalog and clients will no longer see it. You can restore it anytime.
+                </>
+              )}
+            </div>
+
+            <div className="admin-modal-footer">
+              <button
+                type="button"
+                className="btn-admin-secondary"
+                onClick={() => setConfirmModal({ open: false, type: 'archive', item: null })}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn-admin-primary"
+                onClick={() =>
+                  confirmModal.type === 'permanent'
+                    ? handlePermanentDelete(confirmModal.item)
+                    : handleArchive(confirmModal.item)
+                }
+              >
+                {confirmModal.type === 'permanent' ? 'Delete Permanently' : 'Move to History'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Create / Edit Modal Dialog */}
       {modalOpen && (
