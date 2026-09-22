@@ -1,6 +1,7 @@
 const express = require('express');
 const DocumentType = require('../models/DocumentType');
 const CarCategory = require('../models/CarCategory');
+const OrderDocumentLine = require('../models/OrderDocumentLine');
 const File = require('../models/File');
 const { requireAuth, requireRole } = require('../middleware/auth');
 const { uploadSingle } = require('../middleware/fileSize');
@@ -382,6 +383,15 @@ router.delete('/:id/permanent', async (req, res) => {
   try {
     const doc = await DocumentType.findById(req.params.id);
     if (!doc) return res.status(404).json({ error: 'Document type not found.' });
+
+    // Gate against existing order references (Phase 3+ prevention)
+    const orderRefCount = await OrderDocumentLine.countDocuments({ documentTypeId: doc._id });
+    if (orderRefCount > 0) {
+      return res.status(409).json({
+        error: `Cannot permanently delete: ${orderRefCount} order(s) reference this document type. Keep it in History / Archive instead.`,
+        orderRefCount,
+      });
+    }
 
     // Clean up reference in CarCategory if any
     await CarCategory.updateMany(
