@@ -4,6 +4,7 @@ const Order = require('../models/Order');
 const OrderDocumentLine = require('../models/OrderDocumentLine');
 const DocumentType = require('../models/DocumentType');
 const CarCategory = require('../models/CarCategory');
+const User = require('../models/User');
 const { requireAuth, requireRole } = require('../middleware/auth');
 
 const router = express.Router();
@@ -95,6 +96,12 @@ router.get('/:id', async (req, res) => {
       .populate({
         path: 'documentTypeId',
         select: '_id shortName fullName code category defaultSource hasTranslation pricing active',
+      })
+      .populate('assignedChinaAccountId', '_id name email role active')
+      .populate({
+        path: 'uploadedFiles',
+        select: '_id filename contentType size uploadedAt uploadedByUserId',
+        populate: { path: 'uploadedByUserId', select: '_id name email role' },
       })
       .sort({ createdAt: 1 })
       .lean();
@@ -234,9 +241,10 @@ router.patch('/:id/confirm', async (req, res) => {
     }
 
     // 3. Update line sources or attributes if requested
+    // 3. Update line sources or attributes if requested
     if (Array.isArray(lineUpdates) && lineUpdates.length > 0) {
       for (const update of lineUpdates) {
-        const { lineId, source } = update || {};
+        const { lineId, source, assignedChinaAccountId, chinaAccountId } = update || {};
         if (lineId && mongoose.Types.ObjectId.isValid(lineId)) {
           const updateFields = {};
           if (source !== undefined) {
@@ -245,6 +253,23 @@ router.patch('/:id/confirm', async (req, res) => {
             }
             updateFields.source = source;
           }
+
+          const targetAccountId = assignedChinaAccountId !== undefined ? assignedChinaAccountId : chinaAccountId;
+          if (targetAccountId !== undefined) {
+            if (targetAccountId) {
+              if (!mongoose.Types.ObjectId.isValid(targetAccountId)) {
+                return res.status(400).json({ error: `Invalid China associate user ID: ${targetAccountId}` });
+              }
+              const associate = await User.findOne({ _id: targetAccountId, role: 'china_associate', active: true });
+              if (!associate) {
+                return res.status(400).json({ error: 'Target user is not an active China associate.' });
+              }
+              updateFields.assignedChinaAccountId = associate._id;
+            } else {
+              updateFields.assignedChinaAccountId = null;
+            }
+          }
+
           if (Object.keys(updateFields).length > 0) {
             await OrderDocumentLine.findOneAndUpdate(
               { _id: lineId, orderId: order._id },
@@ -278,6 +303,20 @@ router.patch('/:id/confirm', async (req, res) => {
       });
     }
 
+    // Check that EVERY china-source line has an assignedChinaAccountId
+    const chinaLinesMissingAssignee = remainingLines.filter(
+      (l) => l.source === 'china' && !l.assignedChinaAccountId
+    );
+    if (chinaLinesMissingAssignee.length > 0) {
+      const missingDetails = chinaLinesMissingAssignee.map(
+        (l) => l.documentTypeId?.shortName || l._id.toString()
+      );
+      return res.status(400).json({
+        error: `Cannot confirm order: All China-sourced document lines must be assigned to an active China associate. ${chinaLinesMissingAssignee.length} line(s) missing assignment: ${missingDetails.join(', ')}.`,
+        missingLineIds: chinaLinesMissingAssignee.map((l) => l._id),
+      });
+    }
+
     // 5. Transition order to 'confirmed'
     order.status = 'confirmed';
     order.confirmedBy = req.user._id;
@@ -286,6 +325,12 @@ router.patch('/:id/confirm', async (req, res) => {
 
     const fullyPopulatedLines = await OrderDocumentLine.find({ orderId: order._id })
       .populate('documentTypeId', 'shortName fullName code category defaultSource')
+      .populate('assignedChinaAccountId', '_id name email role active')
+      .populate({
+        path: 'uploadedFiles',
+        select: '_id filename contentType size uploadedAt uploadedByUserId',
+        populate: { path: 'uploadedByUserId', select: '_id name email role' },
+      })
       .lean();
 
     return res.json({
@@ -298,6 +343,180 @@ router.patch('/:id/confirm', async (req, res) => {
   } catch (err) {
     console.error('[PATCH /api/orders/:id/confirm]', err);
     return res.status(500).json({ error: 'Server error confirming order.' });
+  }
+});
+
+// ── PATCH /api/orders/:orderId/lines/:lineId/assign ───────────────────────────
+// Admin-only: Assigns a China associate to a specific document line
+router.patch('/:orderId/lines/:lineId/assign', async (req, res) => {
+  try {
+    const { orderId, lineId } = req.params;
+    const { chinaAccountId, assignedChinaAccountId } = req.body;
+    const targetId = chinaAccountId !== undefined ? chinaAccountId : assignedChinaAccountId;
+
+    if (!mongoose.Types.ObjectId.isValid(orderId) || !mongoose.Types.ObjectId.isValid(lineId)) {
+      return res.status(400).json({ error: 'Invalid order ID or line ID.' });
+    }
+
+    const line = await OrderDocumentLine.findOne({ _id: lineId, orderId });
+    if (!line) {
+      return res.status(404).json({ error: 'Order document line not found.' });
+    }
+
+    if (line.source !== 'china') {
+      return res.status(400).json({
+        error: 'Only china-sourced lines can be assigned to a China associate.',
+      });
+    }
+
+    let assigneeId = null;
+    if (targetId) {
+      if (!mongoose.Types.ObjectId.isValid(targetId)) {
+        return res.status(400).json({ error: 'Invalid China associate ID.' });
+      }
+      const associate = await User.findOne({ _id: targetId, role: 'china_associate', active: true });
+      if (!associate) {
+        return res.status(400).json({ error: 'Target user is not an active China associate.' });
+      }
+      assigneeId = associate._id;
+    }
+
+    line.assignedChinaAccountId = assigneeId;
+    await line.save();
+
+    const populated = await OrderDocumentLine.findById(line._id)
+      .populate('documentTypeId', 'shortName fullName code category defaultSource')
+      .populate('assignedChinaAccountId', '_id name email role active');
+
+    return res.json({
+      message: 'Line assignment updated successfully.',
+      line: populated,
+    });
+  } catch (err) {
+    console.error('[PATCH /api/orders/:orderId/lines/:lineId/assign]', err);
+    return res.status(500).json({ error: 'Server error updating line assignment.' });
+  }
+});
+
+// ── POST /api/orders/:id/package ─────────────────────────────────────────────
+// Admin-only. Valid only when order.status === 'ready_for_dispatch'.
+// Order → 'packaged'. All lines → 'packaged'.
+router.post('/:id/package', async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(404).json({ error: 'Order not found.' });
+    }
+
+    const order = await Order.findById(id);
+    if (!order) {
+      return res.status(404).json({ error: 'Order not found.' });
+    }
+
+    if (order.status !== 'ready_for_dispatch') {
+      return res.status(400).json({
+        error: `Cannot package order: required status is "ready_for_dispatch". Current status: "${order.status}".`,
+      });
+    }
+
+    order.status = 'packaged';
+    await order.save();
+
+    await OrderDocumentLine.updateMany(
+      { orderId: order._id },
+      { $set: { status: 'packaged' } }
+    );
+
+    return res.json({
+      message: 'Order and all document lines marked as packaged.',
+      orderId: order._id,
+      orderStatus: order.status,
+    });
+  } catch (err) {
+    console.error('[POST /api/orders/:id/package]', err);
+    return res.status(500).json({ error: 'Server error packaging order.' });
+  }
+});
+
+// ── POST /api/orders/:id/dispatch ────────────────────────────────────────────
+// Admin-only. Valid only when order.status === 'packaged'.
+// Order → 'sent_to_client'. All lines → 'sent_to_client'.
+router.post('/:id/dispatch', async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(404).json({ error: 'Order not found.' });
+    }
+
+    const order = await Order.findById(id);
+    if (!order) {
+      return res.status(404).json({ error: 'Order not found.' });
+    }
+
+    if (order.status !== 'packaged') {
+      return res.status(400).json({
+        error: `Cannot dispatch order: required status is "packaged". Current status: "${order.status}".`,
+      });
+    }
+
+    order.status = 'sent_to_client';
+    await order.save();
+
+    await OrderDocumentLine.updateMany(
+      { orderId: order._id },
+      { $set: { status: 'sent_to_client' } }
+    );
+
+    return res.json({
+      message: 'Order dispatched — all document lines marked as sent to client.',
+      orderId: order._id,
+      orderStatus: order.status,
+    });
+  } catch (err) {
+    console.error('[POST /api/orders/:id/dispatch]', err);
+    return res.status(500).json({ error: 'Server error dispatching order.' });
+  }
+});
+
+// ── POST /api/orders/:id/deliver ─────────────────────────────────────────────
+// Admin-only. Valid only when order.status === 'sent_to_client'.
+// Order → 'delivered'. Set deliveredAt. All lines → 'delivered'.
+router.post('/:id/deliver', async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(404).json({ error: 'Order not found.' });
+    }
+
+    const order = await Order.findById(id);
+    if (!order) {
+      return res.status(404).json({ error: 'Order not found.' });
+    }
+
+    if (order.status !== 'sent_to_client') {
+      return res.status(400).json({
+        error: `Cannot mark delivered: required status is "sent_to_client". Current status: "${order.status}".`,
+      });
+    }
+
+    order.status = 'delivered';
+    order.deliveredAt = new Date();
+    await order.save();
+
+    await OrderDocumentLine.updateMany(
+      { orderId: order._id },
+      { $set: { status: 'delivered' } }
+    );
+
+    return res.json({
+      message: 'Order marked as delivered — all document lines updated.',
+      orderId: order._id,
+      orderStatus: order.status,
+      deliveredAt: order.deliveredAt,
+    });
+  } catch (err) {
+    console.error('[POST /api/orders/:id/deliver]', err);
+    return res.status(500).json({ error: 'Server error marking order as delivered.' });
   }
 });
 

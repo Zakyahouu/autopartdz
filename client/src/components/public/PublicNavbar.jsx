@@ -23,6 +23,17 @@ export default function PublicNavbar() {
         </Link>
 
         <div className="moment-nav-actions">
+          {/* Public Nav Links */}
+          <nav className="moment-nav-links" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <Link to="/" className="moment-nav-admin-link" style={{ textDecoration: 'none' }}>
+              <span>{t('nav.newDemand')}</span>
+            </Link>
+            <Link to="/track" className="moment-nav-admin-link" style={{ textDecoration: 'none', fontWeight: 600 }}>
+              <ShieldCheck size={14} />
+              <span>{t('nav.trackOrder')}</span>
+            </Link>
+          </nav>
+
           {/* Language Switcher */}
           <div className="moment-lang-picker" aria-label={t('nav.language')}>
             <button

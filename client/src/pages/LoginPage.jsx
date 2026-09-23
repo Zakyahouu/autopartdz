@@ -12,9 +12,13 @@ export default function LoginPage() {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
-  // If already logged in as admin, redirect immediately
+  // If already logged in, redirect based on role
   useEffect(() => {
-    if (user?.role === 'admin') navigate('/admin/catalog', { replace: true });
+    if (user?.role === 'admin') {
+      navigate('/admin/orders', { replace: true });
+    } else if (user?.role === 'china_associate') {
+      navigate('/china', { replace: true });
+    }
   }, [user, navigate]);
 
   const handleSubmit = async (e) => {
