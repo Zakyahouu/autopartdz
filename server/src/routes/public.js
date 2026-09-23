@@ -350,7 +350,7 @@ router.post('/orders/correction/lookup', async (req, res) => {
       })
       .lean();
 
-    // STRICT ALLOWLIST: NEVER leak costPrice, activityLog, assignedChinaAccountId, or shippingTrackingCode!
+    // STRICT ALLOWLIST: NEVER leak costPrice, activityLog, assignedAssociateId, or trackingCode!
     const sanitizedLines = lines.map((line) => {
       const doc = line.documentTypeId || {};
       const resolvedName =
@@ -621,7 +621,7 @@ router.get('/orders/track', async (req, res) => {
       .lean();
 
     // STRICT ALLOWLIST: ONLY documentType fullName, status, isDelayed!
-    // NEVER leak clientPrice, costPrice, activityLog, shippingTrackingCode, assignedChinaAccountId, or files!
+    // NEVER leak clientPrice, costPrice, activityLog, trackingCode, assignedAssociateId, or files!
     const sanitizedLines = lines.map((line) => {
       const doc = line.documentTypeId || {};
       const resolvedName =

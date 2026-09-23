@@ -9,30 +9,34 @@ router.use(requireAuth, requireRole('china_associate', 'admin'));
 
 /**
  * GET /api/china/lines
- * Returns lines assigned to the authenticated China associate (or filtered by associateId if admin).
- * STRICT ALLOWLIST: NEVER leaks clientPrice, costPrice, wilaya, address, phone, or any contact fields!
+ * Returns lines delegated to the authenticated associate where status is
+ * 'needed' or 'attached' (the two states requiring action or awaiting review).
+ * Admin can supply ?associateId to view another associate's queue.
+ *
+ * STRICT ALLOWLIST: NEVER leaks clientPrice, costPrice, address, phone,
+ * or full client details.
  */
 router.get('/lines', async (req, res) => {
   try {
-    const filter = {};
+    const filter = {
+      status: { $in: ['needed', 'attached'] },
+    };
 
     if (req.user.role === 'china_associate') {
-      filter.assignedChinaAccountId = req.user._id;
+      filter.assignedAssociateId = req.user._id;
     } else if (req.user.role === 'admin') {
       if (req.query.associateId && mongoose.Types.ObjectId.isValid(req.query.associateId)) {
-        filter.assignedChinaAccountId = req.query.associateId;
+        filter.assignedAssociateId = req.query.associateId;
       } else {
-        filter.source = 'china';
+        // Admin without filter: all delegated lines in action-required states
+        filter.assignedAssociateId = { $ne: null };
       }
-    }
-
-    if (req.query.status && req.query.status !== 'all') {
-      filter.status = req.query.status;
     }
 
     const lines = await OrderDocumentLine.find(filter)
       .populate('documentTypeId', '_id shortName fullName code')
-      .populate('orderId', 'vin carModel')
+      .populate('assignedAssociateId', '_id name email role')
+      .populate('orderId', 'trackingCode vin carModel')
       .populate({
         path: 'uploadedFiles',
         select: '_id filename contentType size uploadedAt uploadedByUserId',
@@ -55,12 +59,15 @@ router.get('/lines', async (req, res) => {
         },
         translationMode: line.translationMode,
         order: {
+          trackingCode: order.trackingCode || '',
           vin: order.vin || '',
           carModel: order.carModel || '',
         },
         status: line.status,
-        shippingTrackingCode: line.shippingTrackingCode || null,
-        isDelayed: Boolean(line.isDelayed),
+        trackingCode: line.trackingCode || null,
+        // Rejection info — shown to associate so they know what to fix
+        lastRejectionNote: line.lastRejectionNote || null,
+        rejectedAt: line.rejectedAt || null,
         uploadedFiles: (line.uploadedFiles || []).map((f) => ({
           id: f._id ? f._id.toString() : f.toString(),
           filename: f.filename || 'Document',
@@ -81,7 +88,7 @@ router.get('/lines', async (req, res) => {
     return res.json(result);
   } catch (err) {
     console.error('[GET /api/china/lines]', err);
-    return res.status(500).json({ error: 'Server error fetching China lines queue.' });
+    return res.status(500).json({ error: 'Server error fetching delegated lines queue.' });
   }
 });
 

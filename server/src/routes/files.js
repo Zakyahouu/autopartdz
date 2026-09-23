@@ -29,7 +29,7 @@ router.get('/:id', requireAuth, requireRole('admin', 'china_associate'), async (
       let hasLineAccess = false;
       if (!isUploader) {
         hasLineAccess = await OrderDocumentLine.exists({
-          assignedChinaAccountId: req.user._id,
+          assignedAssociateId: req.user._id,
           uploadedFiles: file._id,
         });
       }

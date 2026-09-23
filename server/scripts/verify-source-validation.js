@@ -176,7 +176,7 @@ async function run() {
     costPrice: 5000,
     source: 'china',
     status: 'needed',
-    assignedChinaAccountId: associate._id,
+    assignedAssociateId: associate._id,
   });
 
   console.log('\n[3A: Rejection Trace] Attempting to /mark-printed on a CHINA line:');

@@ -97,7 +97,7 @@ router.get('/:id', async (req, res) => {
         path: 'documentTypeId',
         select: '_id shortName fullName code category defaultSource hasTranslation pricing active',
       })
-      .populate('assignedChinaAccountId', '_id name email role active')
+      .populate('assignedAssociateId', '_id name email role active')
       .populate({
         path: 'uploadedFiles',
         select: '_id filename contentType size uploadedAt uploadedByUserId',
@@ -152,7 +152,7 @@ router.delete('/:id', async (req, res) => {
 });
 
 // ── PATCH /api/orders/:id/confirm ─────────────────────────────────────────────
-// Admin confirmation: edit lines, update sources, validate non-null source before confirm
+// Admin confirmation: edit lines, then confirm. No source or assignee gates.
 router.patch('/:id/confirm', async (req, res) => {
   try {
     const { id } = req.params;
@@ -244,7 +244,7 @@ router.patch('/:id/confirm', async (req, res) => {
     // 3. Update line sources or attributes if requested
     if (Array.isArray(lineUpdates) && lineUpdates.length > 0) {
       for (const update of lineUpdates) {
-        const { lineId, source, assignedChinaAccountId, chinaAccountId } = update || {};
+        const { lineId, source, associateId, chinaAccountId } = update || {};
         if (lineId && mongoose.Types.ObjectId.isValid(lineId)) {
           const updateFields = {};
           if (source !== undefined) {
@@ -254,19 +254,19 @@ router.patch('/:id/confirm', async (req, res) => {
             updateFields.source = source;
           }
 
-          const targetAccountId = assignedChinaAccountId !== undefined ? assignedChinaAccountId : chinaAccountId;
+          const targetAccountId = associateId !== undefined ? associateId : chinaAccountId;
           if (targetAccountId !== undefined) {
             if (targetAccountId) {
               if (!mongoose.Types.ObjectId.isValid(targetAccountId)) {
-                return res.status(400).json({ error: `Invalid China associate user ID: ${targetAccountId}` });
+                return res.status(400).json({ error: `Invalid associate user ID: ${targetAccountId}` });
               }
-              const associate = await User.findOne({ _id: targetAccountId, role: 'china_associate', active: true });
+              const associate = await User.findOne({ _id: targetAccountId, active: true });
               if (!associate) {
-                return res.status(400).json({ error: 'Target user is not an active China associate.' });
+                return res.status(400).json({ error: 'Target user not found or inactive.' });
               }
-              updateFields.assignedChinaAccountId = associate._id;
+              updateFields.assignedAssociateId = associate._id;
             } else {
-              updateFields.assignedChinaAccountId = null;
+              updateFields.assignedAssociateId = null;
             }
           }
 
@@ -280,7 +280,7 @@ router.patch('/:id/confirm', async (req, res) => {
       }
     }
 
-    // 4. Validate all remaining lines on this order
+    // 4. Validate: at least one line must exist
     const remainingLines = await OrderDocumentLine.find({ orderId: order._id })
       .populate('documentTypeId', 'shortName')
       .lean();
@@ -291,31 +291,7 @@ router.patch('/:id/confirm', async (req, res) => {
       });
     }
 
-    // Check that EVERY line has a non-null source
-    const linesMissingSource = remainingLines.filter((l) => !l.source);
-    if (linesMissingSource.length > 0) {
-      const missingDetails = linesMissingSource.map(
-        (l) => l.documentTypeId?.shortName || l._id.toString()
-      );
-      return res.status(400).json({
-        error: `Cannot confirm order: All document lines must have a valid source ("local" or "china"). ${linesMissingSource.length} line(s) missing source: ${missingDetails.join(', ')}.`,
-        missingLineIds: linesMissingSource.map((l) => l._id),
-      });
-    }
-
-    // Check that EVERY china-source line has an assignedChinaAccountId
-    const chinaLinesMissingAssignee = remainingLines.filter(
-      (l) => l.source === 'china' && !l.assignedChinaAccountId
-    );
-    if (chinaLinesMissingAssignee.length > 0) {
-      const missingDetails = chinaLinesMissingAssignee.map(
-        (l) => l.documentTypeId?.shortName || l._id.toString()
-      );
-      return res.status(400).json({
-        error: `Cannot confirm order: All China-sourced document lines must be assigned to an active China associate. ${chinaLinesMissingAssignee.length} line(s) missing assignment: ${missingDetails.join(', ')}.`,
-        missingLineIds: chinaLinesMissingAssignee.map((l) => l._id),
-      });
-    }
+    // Source and assignee are now optional at confirm time — no gate here.
 
     // 5. Transition order to 'confirmed'
     order.status = 'confirmed';
@@ -325,7 +301,7 @@ router.patch('/:id/confirm', async (req, res) => {
 
     const fullyPopulatedLines = await OrderDocumentLine.find({ orderId: order._id })
       .populate('documentTypeId', 'shortName fullName code category defaultSource')
-      .populate('assignedChinaAccountId', '_id name email role active')
+      .populate('assignedAssociateId', '_id name email role active')
       .populate({
         path: 'uploadedFiles',
         select: '_id filename contentType size uploadedAt uploadedByUserId',
@@ -347,12 +323,13 @@ router.patch('/:id/confirm', async (req, res) => {
 });
 
 // ── PATCH /api/orders/:orderId/lines/:lineId/assign ───────────────────────────
-// Admin-only: Assigns a China associate to a specific document line
+// Admin-only: Delegates an associate to a specific document line.
+// Any active user can be assigned; no source restriction; callable at any time.
 router.patch('/:orderId/lines/:lineId/assign', async (req, res) => {
   try {
     const { orderId, lineId } = req.params;
-    const { chinaAccountId, assignedChinaAccountId } = req.body;
-    const targetId = chinaAccountId !== undefined ? chinaAccountId : assignedChinaAccountId;
+    const { associateId, chinaAccountId } = req.body;
+    const targetId = associateId !== undefined ? associateId : chinaAccountId;
 
     if (!mongoose.Types.ObjectId.isValid(orderId) || !mongoose.Types.ObjectId.isValid(lineId)) {
       return res.status(400).json({ error: 'Invalid order ID or line ID.' });
@@ -363,33 +340,35 @@ router.patch('/:orderId/lines/:lineId/assign', async (req, res) => {
       return res.status(404).json({ error: 'Order document line not found.' });
     }
 
-    if (line.source !== 'china') {
-      return res.status(400).json({
-        error: 'Only china-sourced lines can be assigned to a China associate.',
-      });
-    }
-
     let assigneeId = null;
     if (targetId) {
       if (!mongoose.Types.ObjectId.isValid(targetId)) {
-        return res.status(400).json({ error: 'Invalid China associate ID.' });
+        return res.status(400).json({ error: 'Invalid associate user ID.' });
       }
-      const associate = await User.findOne({ _id: targetId, role: 'china_associate', active: true });
+      const associate = await User.findOne({ _id: targetId, active: true });
       if (!associate) {
-        return res.status(400).json({ error: 'Target user is not an active China associate.' });
+        return res.status(400).json({ error: 'User not found or inactive.' });
       }
       assigneeId = associate._id;
     }
 
-    line.assignedChinaAccountId = assigneeId;
+    line.assignedAssociateId = assigneeId;
+    line.activityLog.push({
+      timestamp: new Date(),
+      actorId: req.user._id,
+      actorRole: req.user.role,
+      action: assigneeId ? 'assigned' : 'unassigned',
+      note: assigneeId ? 'Assigned to associate.' : 'Assignment cleared.',
+      fileId: null,
+    });
     await line.save();
 
     const populated = await OrderDocumentLine.findById(line._id)
       .populate('documentTypeId', 'shortName fullName code category defaultSource')
-      .populate('assignedChinaAccountId', '_id name email role active');
+      .populate('assignedAssociateId', '_id name email role active');
 
     return res.json({
-      message: 'Line assignment updated successfully.',
+      message: 'Line assignment updated.',
       line: populated,
     });
   } catch (err) {

@@ -132,7 +132,7 @@ async function run() {
     clientPrice: 7000,
     costPrice: 3000,
     source: 'china',
-    assignedChinaAccountId: null, // intentionally unassigned!
+    assignedAssociateId: null, // intentionally unassigned!
     status: 'needed',
   });
 
@@ -167,9 +167,9 @@ async function run() {
   console.log('HTTP Status:', assignRes.status);
   console.log('Assigned line details:');
   console.log(`- Line ID: ${assignBody.line._id}`);
-  console.log(`- Assignee: ${assignBody.line.assignedChinaAccountId?.name} (${assignBody.line.assignedChinaAccountId?._id})`);
+  console.log(`- Assignee: ${assignBody.line.assignedAssociateId?.name} (${assignBody.line.assignedAssociateId?._id})`);
 
-  if (assignRes.status === 200 && assignBody.line.assignedChinaAccountId?._id === chinaUserA._id.toString()) {
+  if (assignRes.status === 200 && assignBody.line.assignedAssociateId?._id === chinaUserA._id.toString()) {
     console.log('✓ PASS: Line successfully assigned to China Associate A!');
   } else {
     console.error('✗ FAIL: Line assignment failed:', assignRes.status, assignBody);
@@ -352,7 +352,7 @@ async function run() {
   const chinaLinesB = await chinaLinesBRes.json();
   console.log(`Associate B lines count: ${chinaLinesB.length} (Expected: 0)`);
   if (chinaLinesB.length === 0) {
-    console.log('✓ PASS: Queue strictly partitions by assignedChinaAccountId!');
+    console.log('✓ PASS: Queue strictly partitions by assignedAssociateId!');
   } else {
     console.error('✗ FAIL: Associate B saw lines not assigned to them!');
     process.exit(1);
@@ -395,7 +395,7 @@ async function run() {
     'costPrice',
     'activityLog',
     'shippingTrackingCode',
-    'assignedChinaAccountId',
+    'assignedAssociateId',
     'uploadedFiles',
     'fileId',
     'confirmedBy',

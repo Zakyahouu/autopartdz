@@ -57,41 +57,45 @@ const orderDocumentLineSchema = new mongoose.Schema(
       type: Number,
       required: [true, 'Cost price is required'],
     },
+    // Display / reporting only — no gate logic reads this field
     source: {
       type: String,
-      enum: ['local', 'china'],
+      enum: ['local', 'china', null],
       default: null,
     },
-    // Only set for China-sourced lines
-    assignedChinaAccountId: {
+    // Optional delegate — any active user can be assigned regardless of source
+    assignedAssociateId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
       default: null,
     },
+    // Unified two-step pipeline: needed → attached → ready
+    // Downstream fulfillment statuses (packaged/sent_to_client/delivered)
+    // are written by order-level routes (/package, /dispatch, /deliver).
     status: {
       type: String,
       enum: [
         'needed',
-        'sent_to_china',
-        'shipped',
-        'pending_admin_review',
-        'needs_correction',
-        'printed',
-        'arrived_at_office',
+        'attached',
+        'ready',
         'packaged',
         'sent_to_client',
         'delivered',
       ],
       default: 'needed',
     },
-    // Visibility flag for overdue SHIPPED lines — not a full status change
-    isDelayed: {
-      type: Boolean,
-      default: false,
-    },
-    // Required to advance past SHIPPED status for China-sourced lines
-    shippingTrackingCode: {
+    // Optional tracking code — nullable for all lines regardless of source
+    trackingCode: {
       type: String,
+      default: null,
+    },
+    // Set on lock(approve=false); cleared on the next successful attach
+    lastRejectionNote: {
+      type: String,
+      default: null,
+    },
+    rejectedAt: {
+      type: Date,
       default: null,
     },
     // Populated only on lines that belong to a Correction order
@@ -99,7 +103,7 @@ const orderDocumentLineSchema = new mongoose.Schema(
       type: String,
       default: null,
     },
-    // Files uploaded by China associate or Admin as proof
+    // Files uploaded by associate or Admin as proof
     uploadedFiles: [
       {
         type: mongoose.Schema.Types.ObjectId,
