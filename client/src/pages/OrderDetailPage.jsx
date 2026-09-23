@@ -1220,30 +1220,78 @@ export default function OrderDetailPage() {
                   <select
                     className="admin-select"
                     value={selectedAddDocId}
-                    onChange={(e) => setSelectedAddDocId(e.target.value)}
+                    onChange={(e) => {
+                      const docId = e.target.value;
+                      setSelectedAddDocId(docId);
+                      // Reset mode to original_only when switching docs;
+                      // if the new doc supports translation we leave the user free to pick.
+                      // Also auto-apply the doc's defaultSource.
+                      const doc = catalogDocs.find((d) => d._id === docId);
+                      setSelectedAddMode('original_only');
+                      if (doc?.defaultSource === 'local' || doc?.defaultSource === 'china') {
+                        setSelectedAddSource(doc.defaultSource);
+                      }
+                    }}
                     required
                   >
                     <option value="">— Select Document —</option>
                     {catalogDocs.map((doc) => (
                       <option key={doc._id} value={doc._id}>
                         {doc.shortName} {doc.code ? `(${doc.code})` : ''}
+                        {doc.hasTranslation ? ' · with translation' : ''}
                       </option>
                     ))}
                   </select>
                 </div>
 
-                <div className="admin-form-group">
-                  <label className="admin-form-label">Translation Mode</label>
-                  <select
-                    className="admin-select"
-                    value={selectedAddMode}
-                    onChange={(e) => setSelectedAddMode(e.target.value)}
-                  >
-                    <option value="original_only">Original Only</option>
-                    <option value="original_plus_translation">Original + Translation</option>
-                    <option value="translation_only">Translation Only</option>
-                  </select>
-                </div>
+                {/* Translation Mode — options depend on the selected document */}
+                {(() => {
+                  const selectedDoc = catalogDocs.find((d) => d._id === selectedAddDocId);
+                  const hasTranslation = selectedDoc?.hasTranslation ?? true; // default open until a doc is chosen
+
+                  if (!selectedAddDocId) {
+                    // No doc selected yet — show a placeholder row
+                    return (
+                      <div className="admin-form-group">
+                        <label className="admin-form-label">Translation Mode</label>
+                        <select className="admin-select" disabled>
+                          <option>— Select a document first —</option>
+                        </select>
+                      </div>
+                    );
+                  }
+
+                  if (!hasTranslation) {
+                    // Document has no translation service — lock to original only
+                    return (
+                      <div className="admin-form-group">
+                        <label className="admin-form-label">Translation Mode</label>
+                        <select className="admin-select" value="original_only" disabled>
+                          <option value="original_only">Original Only</option>
+                        </select>
+                        <p style={{ fontSize: 11, color: 'var(--admin-text-muted)', marginTop: 4 }}>
+                          This document does not offer a translation service.
+                        </p>
+                      </div>
+                    );
+                  }
+
+                  // Document supports translation — show all three options
+                  return (
+                    <div className="admin-form-group">
+                      <label className="admin-form-label">Translation Mode</label>
+                      <select
+                        className="admin-select"
+                        value={selectedAddMode}
+                        onChange={(e) => setSelectedAddMode(e.target.value)}
+                      >
+                        <option value="original_only">Original Only</option>
+                        <option value="original_plus_translation">Original + Translation</option>
+                        <option value="translation_only">Translation Only</option>
+                      </select>
+                    </div>
+                  );
+                })()}
 
                 <div className="admin-form-group">
                   <label className="admin-form-label">Fulfillment Source</label>
