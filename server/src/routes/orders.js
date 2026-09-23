@@ -398,4 +398,126 @@ router.patch('/:orderId/lines/:lineId/assign', async (req, res) => {
   }
 });
 
+// ── POST /api/orders/:id/package ─────────────────────────────────────────────
+// Admin-only. Valid only when order.status === 'ready_for_dispatch'.
+// Order → 'packaged'. All lines → 'packaged'.
+router.post('/:id/package', async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(404).json({ error: 'Order not found.' });
+    }
+
+    const order = await Order.findById(id);
+    if (!order) {
+      return res.status(404).json({ error: 'Order not found.' });
+    }
+
+    if (order.status !== 'ready_for_dispatch') {
+      return res.status(400).json({
+        error: `Cannot package order: required status is "ready_for_dispatch". Current status: "${order.status}".`,
+      });
+    }
+
+    order.status = 'packaged';
+    await order.save();
+
+    await OrderDocumentLine.updateMany(
+      { orderId: order._id },
+      { $set: { status: 'packaged' } }
+    );
+
+    return res.json({
+      message: 'Order and all document lines marked as packaged.',
+      orderId: order._id,
+      orderStatus: order.status,
+    });
+  } catch (err) {
+    console.error('[POST /api/orders/:id/package]', err);
+    return res.status(500).json({ error: 'Server error packaging order.' });
+  }
+});
+
+// ── POST /api/orders/:id/dispatch ────────────────────────────────────────────
+// Admin-only. Valid only when order.status === 'packaged'.
+// Order → 'sent_to_client'. All lines → 'sent_to_client'.
+router.post('/:id/dispatch', async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(404).json({ error: 'Order not found.' });
+    }
+
+    const order = await Order.findById(id);
+    if (!order) {
+      return res.status(404).json({ error: 'Order not found.' });
+    }
+
+    if (order.status !== 'packaged') {
+      return res.status(400).json({
+        error: `Cannot dispatch order: required status is "packaged". Current status: "${order.status}".`,
+      });
+    }
+
+    order.status = 'sent_to_client';
+    await order.save();
+
+    await OrderDocumentLine.updateMany(
+      { orderId: order._id },
+      { $set: { status: 'sent_to_client' } }
+    );
+
+    return res.json({
+      message: 'Order dispatched — all document lines marked as sent to client.',
+      orderId: order._id,
+      orderStatus: order.status,
+    });
+  } catch (err) {
+    console.error('[POST /api/orders/:id/dispatch]', err);
+    return res.status(500).json({ error: 'Server error dispatching order.' });
+  }
+});
+
+// ── POST /api/orders/:id/deliver ─────────────────────────────────────────────
+// Admin-only. Valid only when order.status === 'sent_to_client'.
+// Order → 'delivered'. Set deliveredAt. All lines → 'delivered'.
+router.post('/:id/deliver', async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(404).json({ error: 'Order not found.' });
+    }
+
+    const order = await Order.findById(id);
+    if (!order) {
+      return res.status(404).json({ error: 'Order not found.' });
+    }
+
+    if (order.status !== 'sent_to_client') {
+      return res.status(400).json({
+        error: `Cannot mark delivered: required status is "sent_to_client". Current status: "${order.status}".`,
+      });
+    }
+
+    order.status = 'delivered';
+    order.deliveredAt = new Date();
+    await order.save();
+
+    await OrderDocumentLine.updateMany(
+      { orderId: order._id },
+      { $set: { status: 'delivered' } }
+    );
+
+    return res.json({
+      message: 'Order marked as delivered — all document lines updated.',
+      orderId: order._id,
+      orderStatus: order.status,
+      deliveredAt: order.deliveredAt,
+    });
+  } catch (err) {
+    console.error('[POST /api/orders/:id/deliver]', err);
+    return res.status(500).json({ error: 'Server error marking order as delivered.' });
+  }
+});
+
 module.exports = router;

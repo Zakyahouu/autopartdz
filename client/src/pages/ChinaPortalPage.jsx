@@ -230,7 +230,7 @@ export default function ChinaPortalPage() {
 
   // Filtered Lines
   const filteredLines = lines.filter((line) => {
-    if (statusFilter === 'needed' && line.status !== 'needed' && line.status !== 'sent_to_china') return false;
+    if (statusFilter === 'needed' && line.status !== 'needed' && line.status !== 'sent_to_china' && line.status !== 'needs_correction') return false;
     if (statusFilter === 'shipped' && line.status !== 'shipped') return false;
     if (statusFilter === 'delayed' && !line.isDelayed) return false;
 
@@ -248,7 +248,8 @@ export default function ChinaPortalPage() {
 
   // Counters
   const countTotal = lines.length;
-  const countNeeded = lines.filter((l) => ['needed', 'sent_to_china'].includes(l.status)).length;
+  // needs_correction counts as Action Required — associate needs to re-ship
+  const countNeeded = lines.filter((l) => ['needed', 'sent_to_china', 'needs_correction'].includes(l.status)).length;
   const countShipped = lines.filter((l) => l.status === 'shipped').length;
   const countDelayed = lines.filter((l) => l.isDelayed).length;
 
@@ -502,19 +503,60 @@ export default function ChinaPortalPage() {
                 </thead>
                 <tbody>
                   {filteredLines.map((line) => {
-                    const isShippable = ['needed', 'sent_to_china'].includes(line.status);
+                    const isShippable = ['needed', 'sent_to_china', 'needs_correction'].includes(line.status);
                     const isShipped = line.status === 'shipped';
+                    const isCorrection = line.status === 'needs_correction';
+
+                    // Extract latest rejection note for needs_correction lines
+                    const rejEntry = isCorrection
+                      ? [...(line.activityLog || [])].reverse().find(e => e.action === 'rejected')
+                      : null;
 
                     return (
-                      <tr key={line.id} style={{ borderBottom: '1px solid #273549' }}>
+                      <tr key={line.id} style={{
+                        borderBottom: '1px solid #273549',
+                        background: isCorrection ? 'rgba(220,38,38,0.04)' : undefined,
+                      }}>
                         {/* Document */}
                         <td style={{ padding: '14px 16px' }}>
-                          <div style={{ fontWeight: 600, color: '#f8fafc' }}>
-                            {line.documentType?.fullName || 'Customs Document'}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <div style={{ fontWeight: 600, color: '#f8fafc' }}>
+                              {line.documentType?.fullName || 'Customs Document'}
+                            </div>
+                            {isCorrection && (
+                              <span style={{
+                                fontSize: 10,
+                                fontWeight: 700,
+                                padding: '2px 6px',
+                                borderRadius: 4,
+                                backgroundColor: 'rgba(220,38,38,0.2)',
+                                color: '#fca5a5',
+                                border: '1px solid rgba(220,38,38,0.4)',
+                                flexShrink: 0,
+                              }}>
+                                ⚠ NEEDS CORRECTION
+                              </span>
+                            )}
                           </div>
                           <div style={{ fontSize: 11, color: '#94a3b8', fontFamily: 'monospace', marginTop: 2 }}>
                             {line.documentType?.code || line.id}
                           </div>
+
+                          {/* Rejection note for needs_correction lines */}
+                          {isCorrection && rejEntry?.note && (
+                            <div style={{
+                              marginTop: 6,
+                              fontSize: 11,
+                              background: 'rgba(220,38,38,0.1)',
+                              border: '1px solid rgba(220,38,38,0.3)',
+                              borderRadius: 4,
+                              padding: '5px 8px',
+                              color: '#fca5a5',
+                            }}>
+                              <span style={{ fontWeight: 700 }}>Admin rejection note: </span>
+                              {rejEntry.note}
+                            </div>
+                          )}
 
                           {/* Uploaded Documents List */}
                           {line.uploadedFiles && line.uploadedFiles.length > 0 && (
@@ -629,12 +671,19 @@ export default function ChinaPortalPage() {
                                 padding: '3px 8px',
                                 borderRadius: 12,
                                 backgroundColor:
-                                  line.status === 'shipped'
+                                  isCorrection
+                                    ? 'rgba(220,38,38,0.15)'
+                                    : line.status === 'shipped'
                                     ? 'rgba(16, 185, 129, 0.15)'
                                     : 'rgba(245, 158, 11, 0.15)',
-                                color: line.status === 'shipped' ? '#10b981' : '#f59e0b',
+                                color:
+                                  isCorrection ? '#fca5a5'
+                                  : line.status === 'shipped' ? '#10b981'
+                                  : '#f59e0b',
                                 border: `1px solid ${
-                                  line.status === 'shipped'
+                                  isCorrection
+                                    ? 'rgba(220,38,38,0.3)'
+                                    : line.status === 'shipped'
                                     ? 'rgba(16, 185, 129, 0.3)'
                                     : 'rgba(245, 158, 11, 0.3)'
                                 }`,
