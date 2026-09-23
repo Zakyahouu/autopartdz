@@ -148,7 +148,7 @@ async function run() {
     clientPrice: 12000,
     costPrice: 6000,
     source: 'china',
-    assignedChinaAccountId: associateA._id,
+    assignedAssociateId: associateA._id,
     status: 'needed',
   });
 
@@ -171,7 +171,7 @@ async function run() {
     clientPrice: 12000,
     costPrice: 6000,
     source: 'china',
-    assignedChinaAccountId: associateA._id,
+    assignedAssociateId: associateA._id,
     status: 'needed',
   });
 
@@ -374,7 +374,7 @@ async function run() {
     'clientPrice',
     'costPrice',
     'shippingTrackingCode',
-    'assignedChinaAccountId',
+    'assignedAssociateId',
     'activityLog',
     'SF-9911223344',
   ];

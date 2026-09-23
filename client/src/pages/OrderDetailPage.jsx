@@ -15,8 +15,6 @@ import {
   RotateCcw,
   X,
   ExternalLink,
-  Send,
-  Printer,
   Upload,
   Copy,
   Check,
@@ -28,6 +26,9 @@ import {
   Package,
   Truck,
   MapPin,
+  Lock,
+  Unlock,
+  UserCheck,
 } from 'lucide-react';
 
 export default function OrderDetailPage() {
@@ -39,42 +40,25 @@ export default function OrderDetailPage() {
   const [error, setError] = useState('');
   const [actionLoading, setActionLoading] = useState(false);
 
-  // Line source changes: map of lineId -> source ('local' | 'china')
-  const [lineSources, setLineSources] = useState({});
-  // China Associates list
-  const [chinaAssociates, setChinaAssociates] = useState([]);
+  // Delegates list (all active users)
+  const [associates, setAssociates] = useState([]);
   // Line assignees: map of lineId -> userId
   const [lineAssignees, setLineAssignees] = useState({});
 
-  // Proxy progression modals
-  const [proxyShipLine, setProxyShipLine] = useState(null);
-  const [proxyShipTrackingCode, setProxyShipTrackingCode] = useState('');
-  const [proxyShipNote, setProxyShipNote] = useState('');
-  const [proxyShipFile, setProxyShipFile] = useState(null);
-  const [proxyShipBusy, setProxyShipBusy] = useState(false);
-  const [proxyShipError, setProxyShipError] = useState('');
+  // Lock modal (approve / reject attached line)
+  const [lockLine, setLockLine] = useState(null);
+  const [lockApprove, setLockApprove] = useState(true);
+  const [lockNote, setLockNote] = useState('');
+  const [lockBusy, setLockBusy] = useState(false);
+  const [lockError, setLockError] = useState('');
 
-  const [proxyPrintLine, setProxyPrintLine] = useState(null);
-  const [proxyPrintNote, setProxyPrintNote] = useState('');
-  const [proxyPrintFile, setProxyPrintFile] = useState(null);
-  const [proxyPrintBusy, setProxyPrintBusy] = useState(false);
-  const [proxyPrintError, setProxyPrintError] = useState('');
-
-  const [proxyDelayLine, setProxyDelayLine] = useState(null);
-  const [proxyDelayIsDelayed, setProxyDelayIsDelayed] = useState(false);
-  const [proxyDelayNote, setProxyDelayNote] = useState('');
-  const [proxyDelayBusy, setProxyDelayBusy] = useState(false);
-  const [proxyDelayError, setProxyDelayError] = useState('');
-
-  // Review (approve / reject) modal
-  const [reviewLine, setReviewLine] = useState(null);
-  const [reviewDecision, setReviewDecision] = useState('approve');
-  const [reviewNote, setReviewNote] = useState('');
-  const [reviewBusy, setReviewBusy] = useState(false);
-  const [reviewError, setReviewError] = useState('');
-
-  // Mark-Arrived busy state (per line)
-  const [arrivedBusyId, setArrivedBusyId] = useState(null);
+  // Admin attach modal (attach document to line directly)
+  const [adminAttachLine, setAdminAttachLine] = useState(null);
+  const [adminAttachFile, setAdminAttachFile] = useState(null);
+  const [adminAttachTracking, setAdminAttachTracking] = useState('');
+  const [adminAttachNote, setAdminAttachNote] = useState('');
+  const [adminAttachBusy, setAdminAttachBusy] = useState(false);
+  const [adminAttachError, setAdminAttachError] = useState('');
 
   // Order-level fulfillment busy
   const [fulfillmentBusy, setFulfillmentBusy] = useState(false);
@@ -103,14 +87,11 @@ export default function OrderDetailPage() {
     const { ok, data } = await apiFetch(`/orders/${id}`);
     if (ok && data) {
       setOrder(data);
-      // Initialize line sources & assignees
-      const sources = {};
+      // Initialize assignees from new field name
       const assignees = {};
       (data.lines || []).forEach((l) => {
-        sources[l._id] = l.source;
-        assignees[l._id] = l.assignedChinaAccountId?._id || l.assignedChinaAccountId || '';
+        assignees[l._id] = l.assignedAssociateId?._id || l.assignedAssociateId || '';
       });
-      setLineSources(sources);
       setLineAssignees(assignees);
     } else {
       setError(data?.error || 'Failed to load order details.');
@@ -125,43 +106,29 @@ export default function OrderDetailPage() {
     }
   };
 
-  const loadChinaAssociates = async () => {
-    const { ok, data } = await apiFetch('/users?role=china_associate&active=true');
+  const loadAssociates = async () => {
+    const { ok, data } = await apiFetch('/users?active=true');
     if (ok && Array.isArray(data)) {
-      setChinaAssociates(data);
+      setAssociates(data.filter((u) => u.role === 'china_associate' || u.role === 'admin'));
     }
   };
 
   useEffect(() => {
     loadOrderDetail();
     loadCatalog();
-    loadChinaAssociates();
+    loadAssociates();
   }, [id]);
 
-  const handleSourceChange = (lineId, newSource) => {
-    setLineSources((prev) => ({
-      ...prev,
-      [lineId]: newSource === '' ? null : newSource,
-    }));
-  };
-
   const handleAssigneeChange = async (lineId, newAssigneeId) => {
-    setLineAssignees((prev) => ({
-      ...prev,
-      [lineId]: newAssigneeId,
-    }));
-
-    // If order is already confirmed, persist assignment immediately via PATCH /orders/:id/lines/:lineId/assign
+    setLineAssignees((prev) => ({ ...prev, [lineId]: newAssigneeId }));
+    // Persist immediately on confirmed+ orders
     if (order && order.status !== 'pending') {
       const res = await apiFetch(`/orders/${id}/lines/${lineId}/assign`, {
         method: 'PATCH',
-        body: JSON.stringify({ chinaAccountId: newAssigneeId || null }),
+        body: JSON.stringify({ associateId: newAssigneeId || null }),
       });
-      if (res.ok) {
-        loadOrderDetail();
-      } else {
-        alert(res.data?.error || 'Failed to update line assignment.');
-      }
+      if (res.ok) loadOrderDetail();
+      else alert(res.data?.error || 'Failed to update line assignment.');
     }
   };
 
@@ -213,182 +180,79 @@ export default function OrderDetailPage() {
   };
 
   const handleConfirmOrder = async () => {
-    // Check if any line has an unset source
-    const currentLines = order.lines || [];
-    const missingSources = currentLines.filter((l) => !lineSources[l._id]);
-
-    if (missingSources.length > 0) {
-      alert(
-        `Cannot confirm order: ${missingSources.length} document line(s) must have a valid source ("Local" or "China"). Please assign all sources first.`
-      );
-      return;
-    }
-
-    // Part B rule: A china-source line cannot be left unassigned once source = 'china' is set
-    const missingAssignees = currentLines.filter(
-      (l) => lineSources[l._id] === 'china' && !lineAssignees[l._id]
-    );
-
-    if (missingAssignees.length > 0) {
-      alert(
-        `Cannot confirm order: All China-sourced document lines must be assigned to an active China associate. ${missingAssignees.length} line(s) missing assignment.`
-      );
-      return;
-    }
-
     setActionLoading(true);
-    // Submit all updated sources and assignees, triggering confirmation
-    const lineUpdates = Object.entries(lineSources).map(([lineId, source]) => ({
-      lineId,
-      source,
-      assignedChinaAccountId: source === 'china' ? lineAssignees[lineId] || null : null,
-    }));
+    // Submit any pending assignee updates alongside the confirm call
+    const lineUpdates = Object.entries(lineAssignees)
+      .filter(([, v]) => v)
+      .map(([lineId, associateId]) => ({ lineId, associateId }));
 
     const res = await apiFetch(`/orders/${id}/confirm`, {
       method: 'PATCH',
-      body: JSON.stringify({
-        lineUpdates,
-      }),
+      body: JSON.stringify({ lineUpdates }),
     });
     setActionLoading(false);
+    if (res.ok) loadOrderDetail();
+    else alert(res.data?.error || 'Failed to confirm order.');
+  };
 
-    if (res.ok) {
-      loadOrderDetail();
-    } else {
-      alert(res.data?.error || 'Failed to confirm order.');
+  // ── Lock submit (admin: approve or reject an attached line) ──────────────
+  const handleLockSubmit = async (e) => {
+    e.preventDefault();
+    if (!lockApprove && !lockNote.trim()) {
+      setLockError('A note is required when rejecting.');
+      return;
+    }
+    setLockBusy(true);
+    setLockError('');
+    try {
+      const { ok, data } = await apiFetch(`/order-lines/${lockLine._id}/lock`, {
+        method: 'POST',
+        body: JSON.stringify({ approve: lockApprove, note: lockNote.trim() }),
+      });
+      if (!ok) throw new Error(data?.error || 'Failed to lock line.');
+      setLockLine(null);
+      setLockNote('');
+      await loadOrderDetail();
+    } catch (err) {
+      setLockError(err.message);
+    } finally {
+      setLockBusy(false);
     }
   };
 
-  // Proxy ship submit
-  const handleProxyShipSubmit = async (e) => {
+  // ── Admin attach submit (attach file to a line, triggers needed→attached) ─
+  const handleAdminAttachSubmit = async (e) => {
     e.preventDefault();
-    if (!proxyShipTrackingCode.trim()) {
-      setProxyShipError('Shipping tracking code is required.');
+    if (!adminAttachFile) {
+      setAdminAttachError('Please select a file.');
       return;
     }
-    setProxyShipBusy(true);
-    setProxyShipError('');
+    setAdminAttachBusy(true);
+    setAdminAttachError('');
     try {
       const formData = new FormData();
-      formData.append('shippingTrackingCode', proxyShipTrackingCode.trim());
-      if (proxyShipNote.trim()) formData.append('note', proxyShipNote.trim());
-      if (proxyShipFile) formData.append('file', proxyShipFile);
+      formData.append('file', adminAttachFile);
+      if (adminAttachTracking.trim()) formData.append('trackingCode', adminAttachTracking.trim());
+      if (adminAttachNote.trim()) formData.append('note', adminAttachNote.trim());
 
       const token = localStorage.getItem('autopartdz_token');
-      const res = await fetch(`/api/order-lines/${proxyShipLine._id}/ship`, {
+      const res = await fetch(`/api/order-lines/${adminAttachLine._id}/attach`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
         body: formData,
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to mark line as shipped');
+      if (!res.ok) throw new Error(data?.error || 'Failed to attach document.');
 
-      setProxyShipLine(null);
-      setProxyShipTrackingCode('');
-      setProxyShipNote('');
-      setProxyShipFile(null);
-      loadOrderDetail();
-    } catch (err) {
-      setProxyShipError(err.message);
-    } finally {
-      setProxyShipBusy(false);
-    }
-  };
-
-  // Proxy print submit
-  const handleProxyPrintSubmit = async (e) => {
-    e.preventDefault();
-    setProxyPrintBusy(true);
-    setProxyPrintError('');
-    try {
-      const formData = new FormData();
-      if (proxyPrintNote.trim()) formData.append('note', proxyPrintNote.trim());
-      if (proxyPrintFile) formData.append('file', proxyPrintFile);
-
-      const token = localStorage.getItem('autopartdz_token');
-      const res = await fetch(`/api/order-lines/${proxyPrintLine._id}/mark-printed`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
-        body: formData,
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to mark line as printed');
-
-      setProxyPrintLine(null);
-      setProxyPrintNote('');
-      setProxyPrintFile(null);
-      loadOrderDetail();
-    } catch (err) {
-      setProxyPrintError(err.message);
-    } finally {
-      setProxyPrintBusy(false);
-    }
-  };
-
-  // Proxy delay submit
-  const handleProxyDelaySubmit = async (e) => {
-    e.preventDefault();
-    setProxyDelayBusy(true);
-    setProxyDelayError('');
-    try {
-      const { ok, data } = await apiFetch(`/order-lines/${proxyDelayLine._id}/delay`, {
-        method: 'PATCH',
-        body: JSON.stringify({
-          isDelayed: proxyDelayIsDelayed,
-          note: proxyDelayNote.trim(),
-        }),
-      });
-      if (!ok) throw new Error(data?.error || 'Failed to update delay status');
-
-      setProxyDelayLine(null);
-      setProxyDelayNote('');
-      loadOrderDetail();
-    } catch (err) {
-      setProxyDelayError(err.message);
-    } finally {
-      setProxyDelayBusy(false);
-    }
-  };
-
-  // ── Review (Approve / Reject) submit ─────────────────────────────────────
-  const handleReviewSubmit = async (e) => {
-    e.preventDefault();
-    if (reviewDecision === 'reject' && !reviewNote.trim()) {
-      setReviewError('A note is required when rejecting — the associate needs to know what to fix.');
-      return;
-    }
-    setReviewBusy(true);
-    setReviewError('');
-    try {
-      const { ok, data } = await apiFetch(`/order-lines/${reviewLine._id}/review`, {
-        method: 'POST',
-        body: JSON.stringify({ decision: reviewDecision, note: reviewNote.trim() }),
-      });
-      if (!ok) throw new Error(data?.error || 'Failed to submit review.');
-      setReviewLine(null);
-      setReviewNote('');
+      setAdminAttachLine(null);
+      setAdminAttachFile(null);
+      setAdminAttachTracking('');
+      setAdminAttachNote('');
       await loadOrderDetail();
     } catch (err) {
-      setReviewError(err.message);
+      setAdminAttachError(err.message);
     } finally {
-      setReviewBusy(false);
-    }
-  };
-
-  // ── Mark Arrived at Office ─────────────────────────────────────────────────
-  const handleMarkArrived = async (lineId) => {
-    setArrivedBusyId(lineId);
-    try {
-      const { ok, data } = await apiFetch(`/order-lines/${lineId}/mark-arrived`, {
-        method: 'POST',
-        body: JSON.stringify({}),
-      });
-      if (!ok) throw new Error(data?.error || 'Failed to mark line as arrived.');
-      await loadOrderDetail();
-    } catch (err) {
-      alert(err.message);
-    } finally {
-      setArrivedBusyId(null);
+      setAdminAttachBusy(false);
     }
   };
 
@@ -934,25 +798,25 @@ export default function OrderDetailPage() {
                                 className="admin-doc-chip"
                                 style={{
                                   fontSize: 11,
-                                  background: line.assignedChinaAccountId ? '#f1f5f9' : '#fef3c7',
-                                  color: line.assignedChinaAccountId ? '#334155' : '#b45309',
+                                  background: line.assignedAssociateId ? '#f1f5f9' : '#fef3c7',
+                                  color: line.assignedAssociateId ? '#334155' : '#b45309',
                                 }}
                               >
-                                {line.assignedChinaAccountId?.name ? line.assignedChinaAccountId.name : 'Unassigned'}
+                                {line.assignedAssociateId?.name ? line.assignedAssociateId.name : 'Unassigned'}
                               </span>
                             )}
                           </div>
-                          {line.shippingTrackingCode && (
+                          {(line.trackingCode || line.shippingTrackingCode) && (
                             <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 4, fontSize: 11, fontFamily: 'var(--font-mono)' }}>
                               <span style={{ color: 'var(--admin-text-secondary)' }}>Tracking:</span>
-                              <span style={{ fontWeight: 600 }}>{line.shippingTrackingCode}</span>
+                              <span style={{ fontWeight: 600 }}>{(line.trackingCode || line.shippingTrackingCode)}</span>
                               <button
                                 type="button"
-                                onClick={() => handleCopyTracking(line.shippingTrackingCode)}
+                                onClick={() => handleCopyTracking((line.trackingCode || line.shippingTrackingCode))}
                                 title="Copy tracking code"
                                 style={{ border: 'none', background: 'transparent', cursor: 'pointer', padding: 1 }}
                               >
-                                {copiedTracking === line.shippingTrackingCode ? <Check size={11} color="#16a34a" /> : <Copy size={11} />}
+                                {copiedTracking === (line.trackingCode || line.shippingTrackingCode) ? <Check size={11} color="#16a34a" /> : <Copy size={11} />}
                               </button>
                             </div>
                           )}

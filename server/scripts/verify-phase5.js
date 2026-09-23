@@ -117,7 +117,7 @@ async function run() {
     clientPrice: 1000,
     costPrice: 500,
     source: 'china',
-    assignedChinaAccountId: assoc._id,
+    assignedAssociateId: assoc._id,
     status: 'needed',
   });
 
@@ -289,7 +289,7 @@ async function run() {
     clientPrice: 1000,
     costPrice: 500,
     source: 'china',
-    assignedChinaAccountId: assoc._id,
+    assignedAssociateId: assoc._id,
     status: 'shipped', // already shipped so /review is valid
   });
 
@@ -353,7 +353,7 @@ async function run() {
     clientPrice: 1000,
     costPrice: 500,
     source: 'china',
-    assignedChinaAccountId: assoc._id,
+    assignedAssociateId: assoc._id,
     status: 'needed',
   });
 
