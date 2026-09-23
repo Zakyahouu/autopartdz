@@ -1140,7 +1140,7 @@ export default function OrderDetailPage() {
                                 color: '#dc2626',
                                 maxWidth: 200,
                               }}>
-                                <div style={{ fontWeight: 700, marginBottom: 2 }}>⚠ Needs Correction</div>
+                                <div style={{ fontWeight: 700, marginBottom: 2, display: 'flex', alignItems: 'center', gap: 4 }}><AlertTriangle size={11} /> Needs Correction</div>
                                 {rejEntry?.note && (
                                   <div style={{ color: '#7f1d1d' }}>Admin note: {rejEntry.note}</div>
                                 )}

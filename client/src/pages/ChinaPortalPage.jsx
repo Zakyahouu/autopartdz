@@ -533,8 +533,11 @@ export default function ChinaPortalPage() {
                                 color: '#fca5a5',
                                 border: '1px solid rgba(220,38,38,0.4)',
                                 flexShrink: 0,
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: 4,
                               }}>
-                                ⚠ NEEDS CORRECTION
+                                <AlertTriangle size={10} /> NEEDS CORRECTION
                               </span>
                             )}
                           </div>
