@@ -22,9 +22,8 @@ export default function PublicTrackingPage() {
   const { t, i18n } = useTranslation();
   const isRtl = i18n.language === 'ar';
 
+  const [searchMode, setSearchMode] = useState('code'); // 'code' | 'vin'
   const [trackingCode, setTrackingCode] = useState('');
-  const [verificationType, setVerificationType] = useState('phone'); // 'phone' | 'vin'
-  const [phone, setPhone] = useState('');
   const [vin, setVin] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -57,41 +56,39 @@ export default function PublicTrackingPage() {
     e.preventDefault();
     setError('');
 
-    const cleanCode = trackingCode.trim().toUpperCase();
-    if (!cleanCode) {
-      setError(t('tracking.codeLabel') + ' is required.');
-      return;
-    }
-
-    if (cleanCode.length !== 8) {
-      setError('Tracking code must be exactly 8 characters.');
-      return;
-    }
-
-    const cleanPhone = phone.trim();
-    const cleanVin = vin.trim().toUpperCase();
-
-    if (verificationType === 'phone' && !cleanPhone) {
-      setError(t('tracking.phoneLabel') + ' is required.');
-      return;
-    }
-    if (verificationType === 'vin' && !cleanVin) {
-      setError(t('tracking.vinLabel') + ' is required.');
-      return;
+    let params;
+    if (searchMode === 'code') {
+      const cleanCode = trackingCode.trim().toUpperCase();
+      if (!cleanCode) {
+        setError(t('tracking.codeRequired'));
+        return;
+      }
+      if (cleanCode.length !== 8) {
+        setError(t('tracking.codeLengthError'));
+        return;
+      }
+      params = new URLSearchParams({
+        trackingCode: cleanCode,
+        locale: i18n.language,
+      });
+    } else {
+      const cleanVin = vin.trim().toUpperCase();
+      if (!cleanVin) {
+        setError(t('tracking.vinRequired'));
+        return;
+      }
+      if (cleanVin.length !== 17) {
+        setError(t('tracking.vinLengthError'));
+        return;
+      }
+      params = new URLSearchParams({
+        vin: cleanVin,
+        locale: i18n.language,
+      });
     }
 
     setBusy(true);
     try {
-      const params = new URLSearchParams({
-        trackingCode: cleanCode,
-        locale: i18n.language,
-      });
-      if (verificationType === 'phone') {
-        params.append('phone', cleanPhone);
-      } else {
-        params.append('vin', cleanVin);
-      }
-
       const res = await fetch(`/api/public/orders/track?${params.toString()}`);
       const data = await res.json();
 
@@ -101,10 +98,7 @@ export default function PublicTrackingPage() {
         return;
       }
 
-      setResult({
-        ...data,
-        trackingCode: cleanCode,
-      });
+      setResult(data);
     } catch (err) {
       console.error('[Tracking lookup error]', err);
       setError(t('common.error'));
@@ -191,44 +185,7 @@ export default function PublicTrackingPage() {
             )}
 
             <form onSubmit={handleLookup} style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-              {/* Tracking Code Field */}
-              <div>
-                <label
-                  style={{
-                    display: 'block',
-                    fontSize: 13,
-                    fontWeight: 600,
-                    color: 'var(--moment-text-main)',
-                    marginBottom: 6,
-                  }}
-                >
-                  {t('tracking.codeLabel')} <span style={{ color: '#dc2626' }}>*</span>
-                </label>
-                <input
-                  type="text"
-                  maxLength={8}
-                  placeholder={t('tracking.codePlaceholder')}
-                  value={trackingCode}
-                  onChange={(e) => setTrackingCode(e.target.value.toUpperCase())}
-                  required
-                  style={{
-                    width: '100%',
-                    padding: '12px 16px',
-                    fontSize: 16,
-                    fontWeight: 700,
-                    letterSpacing: '0.12em',
-                    borderRadius: 10,
-                    border: '1px solid var(--moment-border)',
-                    backgroundColor: 'var(--moment-bg)',
-                    color: 'var(--moment-text-main)',
-                    outline: 'none',
-                    boxSizing: 'border-box',
-                    textAlign: isRtl ? 'right' : 'left',
-                  }}
-                />
-              </div>
-
-              {/* Verification Type Toggle */}
+              {/* Search Mode Toggle */}
               <div>
                 <label
                   style={{
@@ -239,73 +196,118 @@ export default function PublicTrackingPage() {
                     marginBottom: 8,
                   }}
                 >
-                  {t('tracking.verificationPrompt')} <span style={{ color: '#dc2626' }}>*</span>
+                  {t('tracking.trackByPrompt')}
                 </label>
-                <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+                <div style={{ display: 'flex', gap: 10 }}>
                   <button
                     type="button"
                     onClick={() => {
-                      setVerificationType('phone');
+                      setSearchMode('code');
                       setError('');
                     }}
                     style={{
                       flex: 1,
-                      padding: '10px 14px',
-                      borderRadius: 8,
-                      border: `1.5px solid ${verificationType === 'phone' ? 'var(--moment-accent-amber)' : 'var(--moment-border)'}`,
-                      backgroundColor: verificationType === 'phone' ? 'rgba(217, 119, 6, 0.08)' : 'transparent',
-                      color: verificationType === 'phone' ? 'var(--moment-accent-amber)' : 'var(--moment-text-muted)',
-                      fontWeight: 600,
-                      fontSize: 13,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 8,
+                      padding: '12px 14px',
+                      borderRadius: 10,
+                      border: `2px solid ${searchMode === 'code' ? 'var(--moment-accent-amber)' : 'var(--moment-border)'}`,
+                      backgroundColor: searchMode === 'code' ? 'rgba(217, 119, 6, 0.08)' : 'var(--moment-bg)',
+                      color: searchMode === 'code' ? 'var(--moment-accent-amber)' : 'var(--moment-text-muted)',
+                      fontWeight: 700,
+                      fontSize: 14,
                       cursor: 'pointer',
                       transition: 'all 0.2s',
                     }}
                   >
-                    {t('tracking.phoneLabel')}
+                    <ShieldCheck size={17} />
+                    <span>{t('tracking.byTrackingCode')}</span>
                   </button>
                   <button
                     type="button"
                     onClick={() => {
-                      setVerificationType('vin');
+                      setSearchMode('vin');
                       setError('');
                     }}
                     style={{
                       flex: 1,
-                      padding: '10px 14px',
-                      borderRadius: 8,
-                      border: `1.5px solid ${verificationType === 'vin' ? 'var(--moment-accent-amber)' : 'var(--moment-border)'}`,
-                      backgroundColor: verificationType === 'vin' ? 'rgba(217, 119, 6, 0.08)' : 'transparent',
-                      color: verificationType === 'vin' ? 'var(--moment-accent-amber)' : 'var(--moment-text-muted)',
-                      fontWeight: 600,
-                      fontSize: 13,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 8,
+                      padding: '12px 14px',
+                      borderRadius: 10,
+                      border: `2px solid ${searchMode === 'vin' ? 'var(--moment-accent-amber)' : 'var(--moment-border)'}`,
+                      backgroundColor: searchMode === 'vin' ? 'rgba(217, 119, 6, 0.08)' : 'var(--moment-bg)',
+                      color: searchMode === 'vin' ? 'var(--moment-accent-amber)' : 'var(--moment-text-muted)',
+                      fontWeight: 700,
+                      fontSize: 14,
                       cursor: 'pointer',
                       transition: 'all 0.2s',
                     }}
                   >
-                    {t('tracking.vinLabel')}
+                    <Car size={17} />
+                    <span>{t('tracking.byVin')}</span>
                   </button>
                 </div>
+              </div>
 
-                {verificationType === 'phone' ? (
+              {/* Single Active Field depending on selected mode */}
+              {searchMode === 'code' ? (
+                <div>
+                  <label
+                    style={{
+                      display: 'block',
+                      fontSize: 13,
+                      fontWeight: 600,
+                      color: 'var(--moment-text-main)',
+                      marginBottom: 6,
+                    }}
+                  >
+                    {t('tracking.codeLabel')} <span style={{ color: '#dc2626' }}>*</span>
+                  </label>
                   <input
                     type="text"
-                    placeholder={t('tracking.phonePlaceholder')}
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
+                    maxLength={8}
+                    placeholder={t('tracking.codePlaceholder')}
+                    value={trackingCode}
+                    onChange={(e) => setTrackingCode(e.target.value.toUpperCase())}
                     required
+                    autoFocus
                     style={{
                       width: '100%',
                       padding: '12px 16px',
-                      fontSize: 15,
+                      fontSize: 16,
+                      fontWeight: 700,
+                      letterSpacing: '0.12em',
                       borderRadius: 10,
                       border: '1px solid var(--moment-border)',
                       backgroundColor: 'var(--moment-bg)',
                       color: 'var(--moment-text-main)',
                       outline: 'none',
                       boxSizing: 'border-box',
+                      textAlign: isRtl ? 'right' : 'left',
                     }}
                   />
-                ) : (
+                  <span style={{ display: 'block', fontSize: 12, color: 'var(--moment-text-muted)', marginTop: 4 }}>
+                    {t('tracking.codeHint')}
+                  </span>
+                </div>
+              ) : (
+                <div>
+                  <label
+                    style={{
+                      display: 'block',
+                      fontSize: 13,
+                      fontWeight: 600,
+                      color: 'var(--moment-text-main)',
+                      marginBottom: 6,
+                    }}
+                  >
+                    {t('tracking.vinLabel')} <span style={{ color: '#dc2626' }}>*</span>
+                  </label>
                   <input
                     type="text"
                     maxLength={17}
@@ -313,21 +315,28 @@ export default function PublicTrackingPage() {
                     value={vin}
                     onChange={(e) => setVin(e.target.value.toUpperCase())}
                     required
+                    autoFocus
                     style={{
                       width: '100%',
                       padding: '12px 16px',
-                      fontSize: 15,
+                      fontSize: 16,
+                      fontWeight: 700,
+                      letterSpacing: '0.08em',
                       borderRadius: 10,
                       border: '1px solid var(--moment-border)',
                       backgroundColor: 'var(--moment-bg)',
                       color: 'var(--moment-text-main)',
                       outline: 'none',
                       boxSizing: 'border-box',
+                      textAlign: isRtl ? 'right' : 'left',
                       textTransform: 'uppercase',
                     }}
                   />
-                )}
-              </div>
+                  <span style={{ display: 'block', fontSize: 12, color: 'var(--moment-text-muted)', marginTop: 4 }}>
+                    {t('tracking.vinHint')}
+                  </span>
+                </div>
+              )}
 
               {/* Submit Button */}
               <button
@@ -418,6 +427,12 @@ export default function PublicTrackingPage() {
                       <span>{copied ? 'Copied' : 'Copy'}</span>
                     </button>
                   </div>
+                  {result.vin && (
+                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--moment-text-muted)', marginTop: 6 }}>
+                      <Car size={14} />
+                      <span>{t('tracking.vinLabel')}: <strong style={{ color: 'var(--moment-text-main)', letterSpacing: '0.05em' }}>{result.vin}</strong></span>
+                    </div>
+                  )}
                 </div>
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>

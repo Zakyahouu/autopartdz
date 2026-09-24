@@ -780,39 +780,36 @@ function mapOrderStatusToClient(status) {
 }
 
 // ── GET /api/public/orders/track ───────────────────────────────────────────────
-// Public tracking lookup: requires trackingCode + (phone OR vin)
-// No status restriction. Strict allowlist: never leaks prices, logs, tracking codes, or internal statuses!
+// Public tracking lookup: lookup by trackingCode OR vin (one or the other, not both).
+// No status restriction. Strict allowlist: never leaks prices, logs, or internal statuses!
 router.get('/orders/track', async (req, res) => {
   try {
-    const { trackingCode, phone, vin } = req.query;
+    const { trackingCode, vin } = req.query;
     const locale = (req.query.locale || 'en').toLowerCase();
 
-    if (!trackingCode?.trim()) {
-      return res.status(400).json({ error: 'Tracking code is required.' });
-    }
-
-    const cleanPhone = phone?.trim();
+    const cleanCode = trackingCode?.trim().toUpperCase();
     const cleanVin = vin?.trim().toUpperCase();
 
-    if (!cleanPhone && !cleanVin) {
+    if (cleanCode && cleanVin) {
       return res.status(400).json({
-        error: 'Verification required: provide either phone number or VIN along with tracking code.',
+        error: 'Please search using either tracking code or VIN, not both at the same time.',
       });
     }
 
-    const conditions = [{ trackingCode: trackingCode.trim().toUpperCase() }];
-    const matchConditions = [];
-    if (cleanPhone) matchConditions.push({ phone: cleanPhone });
-    if (cleanVin) matchConditions.push({ vin: cleanVin });
+    if (!cleanCode && !cleanVin) {
+      return res.status(400).json({
+        error: 'Please provide either a tracking code or VIN to track your dossier.',
+      });
+    }
 
-    conditions.push({ $or: matchConditions });
+    const query = cleanCode ? { trackingCode: cleanCode } : { vin: cleanVin };
 
     // Note: NO status restriction here (unlike correction lookup)
-    const order = await Order.findOne({ $and: conditions }).lean();
+    const order = await Order.findOne(query).sort({ createdAt: -1 }).lean();
 
     if (!order) {
       return res.status(404).json({
-        error: 'No matching order found. Please check your tracking code and phone number / VIN.',
+        error: 'No matching order found. Please check your tracking code or VIN.',
       });
     }
 
@@ -825,7 +822,7 @@ router.get('/orders/track', async (req, res) => {
       .lean();
 
     // STRICT ALLOWLIST: ONLY documentType fullName, status, isDelayed!
-    // NEVER leak clientPrice, costPrice, activityLog, trackingCode, assignedAssociateId, or files!
+    // NEVER leak clientPrice, costPrice, activityLog, assignedAssociateId, or files!
     const sanitizedLines = lines.map((line) => {
       const doc = line.documentTypeId || {};
       const resolvedName =
@@ -843,6 +840,8 @@ router.get('/orders/track', async (req, res) => {
     });
 
     return res.json({
+      trackingCode: order.trackingCode,
+      vin: order.vin,
       orderStatus: mapOrderStatusToClient(order.status),
       orderType: order.orderType,
       isCorrection: Boolean(order.isCorrection),
