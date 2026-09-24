@@ -1,20 +1,21 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import {
-  Package,
-  AlertTriangle,
+  Camera,
+  Upload,
+  FileText,
+  Check,
+  Copy,
   Clock,
-  CheckCircle2,
+  AlertTriangle,
   Search,
   LogOut,
   RefreshCw,
-  FileText,
-  Upload,
   X,
-  Copy,
-  Check,
   Download,
+  Package,
+  RotateCcw,
 } from 'lucide-react';
 
 export default function ChinaPortalPage() {
@@ -27,16 +28,19 @@ export default function ChinaPortalPage() {
   const [statusFilter, setStatusFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Attach Document Modal
+  // Attach Modal State
   const [attachModalLine, setAttachModalLine] = useState(null);
   const [attachFile, setAttachFile] = useState(null);
+  const [filePreviewUrl, setFilePreviewUrl] = useState(null);
   const [attachTrackingCode, setAttachTrackingCode] = useState('');
   const [attachNote, setAttachNote] = useState('');
   const [attachBusy, setAttachBusy] = useState(false);
   const [attachError, setAttachError] = useState('');
 
-  const [copiedVin, setCopiedVin] = useState('');
-  const [copiedTracking, setCopiedTracking] = useState('');
+  // Clipboard copy feedback
+  const [copiedKey, setCopiedKey] = useState('');
+
+  const fileInputRef = useRef(null);
 
   const fetchLines = async () => {
     try {
@@ -52,7 +56,7 @@ export default function ChinaPortalPage() {
         throw new Error('Failed to load assigned lines queue');
       }
       const data = await res.json();
-      setLines(data);
+      setLines(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error('[China lines error]', err);
       setError(err.message || 'Error fetching lines');
@@ -73,27 +77,68 @@ export default function ChinaPortalPage() {
     fetchLines();
   }, [user, token, navigate]);
 
-  const handleCopyVin = (vin) => {
-    if (!vin) return;
-    navigator.clipboard.writeText(vin);
-    setCopiedVin(vin);
-    setTimeout(() => setCopiedVin(''), 2000);
+  // Handle object URL creation and cleanup for image preview
+  useEffect(() => {
+    if (!attachFile) {
+      setFilePreviewUrl(null);
+      return;
+    }
+
+    if (attachFile.type && attachFile.type.startsWith('image/')) {
+      const url = URL.createObjectURL(attachFile);
+      setFilePreviewUrl(url);
+      return () => URL.revokeObjectURL(url);
+    } else {
+      setFilePreviewUrl(null);
+    }
+  }, [attachFile]);
+
+  const handleCopy = (text, key) => {
+    if (!text) return;
+    navigator.clipboard.writeText(text);
+    setCopiedKey(key);
+    setTimeout(() => setCopiedKey(''), 2000);
   };
 
-  const handleCopyTracking = (code) => {
-    if (!code) return;
-    navigator.clipboard.writeText(code);
-    setCopiedTracking(code);
-    setTimeout(() => setCopiedTracking(''), 2000);
+  const openAttachModal = (line) => {
+    setAttachModalLine(line);
+    setAttachFile(null);
+    setFilePreviewUrl(null);
+    setAttachTrackingCode(line.trackingCode || '');
+    setAttachNote('');
+    setAttachError('');
+  };
+
+  const closeAttachModal = () => {
+    if (attachBusy) return;
+    setAttachModalLine(null);
+    setAttachFile(null);
+    setFilePreviewUrl(null);
+    setAttachTrackingCode('');
+    setAttachNote('');
+    setAttachError('');
+  };
+
+  const handleFileChange = (e) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 12 * 1024 * 1024) {
+        setAttachError('File is too large (maximum size is 12MB).');
+        return;
+      }
+      setAttachError('');
+      setAttachFile(file);
+    }
   };
 
   // Submit Attach Action (needed → attached)
   const handleAttachSubmit = async (e) => {
     e.preventDefault();
     if (!attachFile) {
-      setAttachError('Please select a file to attach.');
+      setAttachError('Please take a photo or select a document file.');
       return;
     }
+
     try {
       setAttachBusy(true);
       setAttachError('');
@@ -108,13 +153,11 @@ export default function ChinaPortalPage() {
         headers: { Authorization: `Bearer ${authToken}` },
         body: formData,
       });
+
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to attach document');
 
-      setAttachModalLine(null);
-      setAttachFile(null);
-      setAttachTrackingCode('');
-      setAttachNote('');
+      closeAttachModal();
       await fetchLines();
     } catch (err) {
       setAttachError(err.message);
@@ -153,11 +196,12 @@ export default function ChinaPortalPage() {
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase().trim();
       const vinMatch = line.order?.vin?.toLowerCase().includes(q);
+      const orderTrackMatch = line.order?.trackingCode?.toLowerCase().includes(q);
       const modelMatch = line.order?.carModel?.toLowerCase().includes(q);
       const docMatch = line.documentType?.fullName?.toLowerCase().includes(q);
       const codeMatch = line.documentType?.code?.toLowerCase().includes(q);
       const trackMatch = line.trackingCode?.toLowerCase().includes(q);
-      return vinMatch || modelMatch || docMatch || codeMatch || trackMatch;
+      return vinMatch || orderTrackMatch || modelMatch || docMatch || codeMatch || trackMatch;
     }
     return true;
   });
@@ -172,593 +216,938 @@ export default function ChinaPortalPage() {
       dir="ltr"
       style={{
         minHeight: '100vh',
-        backgroundColor: '#0f172a',
-        color: '#f8fafc',
-        fontFamily: 'Inter, system-ui, sans-serif',
+        backgroundColor: '#f8fafc',
+        color: '#0f172a',
+        fontFamily: "'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
       }}
     >
-      {/* Top Console Navigation Bar */}
+      {/* ── Sticky Top Bar: Associate Name + Logout (Min 48px tap targets) ──── */}
       <header
         style={{
-          borderBottom: '1px solid #1e293b',
-          backgroundColor: '#090d16',
-          padding: '12px 24px',
+          position: 'sticky',
+          top: 0,
+          zIndex: 40,
+          backgroundColor: '#ffffff',
+          borderBottom: '1px solid #e2e8f0',
+          padding: '0 16px',
+          height: 60,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <div
             style={{
               width: 34,
               height: 34,
-              borderRadius: 8,
-              backgroundColor: '#d97706',
+              borderRadius: 6,
+              backgroundColor: '#a8231b',
+              color: '#ffffff',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              fontWeight: 800,
+              fontWeight: 700,
               fontSize: 14,
-              color: '#ffffff',
+              letterSpacing: '0.04em',
             }}
           >
             DZ
           </div>
           <div>
-            <div style={{ fontSize: 16, fontWeight: 700, color: '#f8fafc', letterSpacing: '0.02em' }}>
-              AutopartDZ <span style={{ color: '#d97706' }}>China Operations</span>
+            <div style={{ fontSize: 14, fontWeight: 700, color: '#0f172a', lineHeight: 1.2 }}>
+              China Ops
             </div>
-            <div style={{ fontSize: 12, color: '#94a3b8' }}>
-              China Sourcing & Logistics Console
+            <div style={{ fontSize: 11, color: '#64748b', lineHeight: 1.2 }}>
+              {user?.name || 'Associate'} {user?.role === 'admin' && '(Admin)'}
             </div>
           </div>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-          <div style={{ textAlign: 'right' }}>
-            <div style={{ fontSize: 13, fontWeight: 600, color: '#f8fafc' }}>
-              {user?.name || 'China Associate'}
-            </div>
-            <div style={{ fontSize: 11, color: '#d97706', fontWeight: 600, textTransform: 'uppercase' }}>
-              {user?.role === 'admin' ? 'Admin Proxy' : 'China Associate'}
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={logout}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 6,
-              padding: '6px 12px',
-              borderRadius: 6,
-              border: '1px solid #334155',
-              backgroundColor: '#1e293b',
-              color: '#cbd5e1',
-              fontSize: 12,
-              cursor: 'pointer',
-            }}
-          >
-            <LogOut size={14} />
-            <span>Logout</span>
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={logout}
+          style={{
+            minHeight: 48,
+            minWidth: 48,
+            padding: '0 14px',
+            borderRadius: 6,
+            border: '1px solid #e2e8f0',
+            backgroundColor: '#ffffff',
+            color: '#475569',
+            fontSize: 13,
+            fontWeight: 600,
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 6,
+            cursor: 'pointer',
+          }}
+          title="Sign out of console"
+        >
+          <LogOut size={16} />
+          <span>Logout</span>
+        </button>
       </header>
 
-      {/* Main Console Content */}
-      <main style={{ maxWidth: 1200, margin: '0 auto', padding: '28px 24px' }}>
-        {/* Metric Cards Row */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16, marginBottom: 28 }}>
-          <div style={{ backgroundColor: '#1e293b', border: '1px solid #334155', borderRadius: 10, padding: 18 }}>
-            <div style={{ fontSize: 12, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase' }}>Total Assigned Lines</div>
-            <div style={{ fontSize: 28, fontWeight: 800, color: '#f8fafc', marginTop: 4 }}>{countTotal}</div>
-          </div>
-          <div style={{ backgroundColor: '#1e293b', border: '1px solid #334155', borderRadius: 10, padding: 18 }}>
-            <div style={{ fontSize: 12, fontWeight: 600, color: '#f59e0b', textTransform: 'uppercase' }}>Action Required</div>
-            <div style={{ fontSize: 28, fontWeight: 800, color: '#f59e0b', marginTop: 4 }}>{countNeeded}</div>
-          </div>
-          <div style={{ backgroundColor: '#1e293b', border: '1px solid #334155', borderRadius: 10, padding: 18 }}>
-            <div style={{ fontSize: 12, fontWeight: 600, color: '#38bdf8', textTransform: 'uppercase' }}>Awaiting Review</div>
-            <div style={{ fontSize: 28, fontWeight: 800, color: '#38bdf8', marginTop: 4 }}>{countAttached}</div>
-          </div>
-        </div>
-
-        {/* Toolbar & Filters */}
+      {/* ── Main Content Container ─────────────────────────────────────────── */}
+      <main style={{ maxWidth: 640, margin: '0 auto', padding: '16px 16px 48px 16px' }}>
+        {/* Title & Refresh */}
         <div
           style={{
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
-            flexWrap: 'wrap',
-            gap: 16,
-            marginBottom: 20,
+            marginBottom: 12,
           }}
         >
-          {/* Status Tabs */}
-          <div style={{ display: 'flex', gap: 6, backgroundColor: '#090d16', padding: 4, borderRadius: 8, border: '1px solid #1e293b' }}>
-            <button
-              type="button"
-              onClick={() => setStatusFilter('all')}
-              style={{
-                padding: '6px 14px',
-                borderRadius: 6,
-                border: 'none',
-                backgroundColor: statusFilter === 'all' ? '#334155' : 'transparent',
-                color: statusFilter === 'all' ? '#f8fafc' : '#94a3b8',
-                fontSize: 13,
-                fontWeight: 600,
-                cursor: 'pointer',
-              }}
-            >
-              All ({countTotal})
-            </button>
-            <button
-              type="button"
-              onClick={() => setStatusFilter('needed')}
-              style={{
-                padding: '6px 14px',
-                borderRadius: 6,
-                border: 'none',
-                backgroundColor: statusFilter === 'needed' ? '#d97706' : 'transparent',
-                color: statusFilter === 'needed' ? '#ffffff' : '#94a3b8',
-                fontSize: 13,
-                fontWeight: 600,
-                cursor: 'pointer',
-              }}
-            >
-              Needed ({countNeeded})
-            </button>
-            <button
-              type="button"
-              onClick={() => setStatusFilter('attached')}
-              style={{
-                padding: '6px 14px',
-                borderRadius: 6,
-                border: 'none',
-                backgroundColor: statusFilter === 'attached' ? '#0284c7' : 'transparent',
-                color: statusFilter === 'attached' ? '#ffffff' : '#94a3b8',
-                fontSize: 13,
-                fontWeight: 600,
-                cursor: 'pointer',
-              }}
-            >
-              Attached ({countAttached})
-            </button>
+          <div>
+            <h1 style={{ fontSize: 20, fontWeight: 700, color: '#0f172a', margin: 0 }}>
+              Document Tasks
+            </h1>
+            <p style={{ fontSize: 13, color: '#64748b', margin: '2px 0 0 0' }}>
+              Upload and verify documents delegated to your station
+            </p>
           </div>
-
-          {/* Search Box */}
-          <div style={{ position: 'relative', width: 280 }}>
-            <Search size={16} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#64748b' }} />
-            <input
-              type="text"
-              placeholder="Search VIN, model, doc, tracking..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              style={{
-                width: '100%',
-                padding: '8px 12px 8px 36px',
-                fontSize: 13,
-                borderRadius: 6,
-                border: '1px solid #334155',
-                backgroundColor: '#1e293b',
-                color: '#f8fafc',
-                outline: 'none',
-                boxSizing: 'border-box',
-              }}
-            />
-          </div>
+          <button
+            type="button"
+            onClick={fetchLines}
+            disabled={loading}
+            style={{
+              minHeight: 48,
+              minWidth: 48,
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              borderRadius: 6,
+              border: '1px solid #e2e8f0',
+              backgroundColor: '#ffffff',
+              color: '#475569',
+              cursor: loading ? 'not-allowed' : 'pointer',
+            }}
+            title="Refresh tasks"
+          >
+            <RefreshCw size={16} className={loading ? 'spin-animate' : ''} />
+          </button>
         </div>
 
-        {/* Lines Worklist Table */}
-        <div style={{ backgroundColor: '#1e293b', border: '1px solid #334155', borderRadius: 10, overflow: 'hidden' }}>
-          {loading ? (
-            <div style={{ padding: 48, textAlign: 'center', color: '#94a3b8' }}>
-              <RefreshCw size={24} className="spin-animate" style={{ margin: '0 auto 12px' }} />
-              <div>Loading assigned documents queue...</div>
-            </div>
-          ) : error ? (
-            <div style={{ padding: 32, textAlign: 'center', color: '#f87171' }}>
-              <AlertTriangle size={24} style={{ margin: '0 auto 8px' }} />
-              <div>{error}</div>
-            </div>
-          ) : filteredLines.length === 0 ? (
-            <div style={{ padding: 48, textAlign: 'center', color: '#94a3b8' }}>
-              <Package size={36} style={{ margin: '0 auto 12px', opacity: 0.5 }} />
-              <div style={{ fontSize: 16, fontWeight: 600, color: '#94a3b8' }}>No assigned documents found</div>
-              <div style={{ fontSize: 13, color: '#64748b', marginTop: 4 }}>
-                {statusFilter === 'all'
-                  ? 'There are currently no document lines assigned to you in action-required states.'
-                  : `No lines currently matching filter "${statusFilter}".`}
-              </div>
-            </div>
-          ) : (
-            <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: 13 }}>
-                <thead>
-                  <tr style={{ borderBottom: '1px solid #334155', backgroundColor: '#162032', color: '#94a3b8', fontSize: 12, textTransform: 'uppercase' }}>
-                    <th style={{ padding: '12px 16px' }}>Document</th>
-                    <th style={{ padding: '12px 16px' }}>Vehicle Info</th>
-                    <th style={{ padding: '12px 16px' }}>Translation</th>
-                    <th style={{ padding: '12px 16px' }}>Tracking Code</th>
-                    <th style={{ padding: '12px 16px' }}>Status</th>
-                    <th style={{ padding: '12px 16px', textAlign: 'right' }}>Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredLines.map((line) => {
-                    const isNeeded = line.status === 'needed';
-                    const isAttached = line.status === 'attached';
+        {/* ── Horizontal Scrollable Filter Tabs (Min 48px tap height) ──────── */}
+        <div
+          style={{
+            display: 'flex',
+            gap: 8,
+            overflowX: 'auto',
+            paddingBottom: 4,
+            marginBottom: 14,
+            scrollbarWidth: 'none',
+            msOverflowStyle: 'none',
+            WebkitOverflowScrolling: 'touch',
+          }}
+        >
+          <button
+            type="button"
+            onClick={() => setStatusFilter('all')}
+            style={{
+              minHeight: 48,
+              padding: '0 18px',
+              borderRadius: 24,
+              border: '1px solid',
+              borderColor: statusFilter === 'all' ? '#a8231b' : '#e2e8f0',
+              backgroundColor: statusFilter === 'all' ? '#a8231b' : '#ffffff',
+              color: statusFilter === 'all' ? '#ffffff' : '#475569',
+              fontSize: 13,
+              fontWeight: 600,
+              cursor: 'pointer',
+              whiteSpace: 'nowrap',
+              flexShrink: 0,
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+            }}
+          >
+            <span>All</span>
+            <span
+              style={{
+                fontSize: 11,
+                padding: '2px 6px',
+                borderRadius: 10,
+                backgroundColor: statusFilter === 'all' ? 'rgba(255,255,255,0.25)' : '#f1f5f9',
+                color: statusFilter === 'all' ? '#ffffff' : '#475569',
+              }}
+            >
+              {countTotal}
+            </span>
+          </button>
 
-                    return (
-                      <tr
-                        key={line.id}
+          <button
+            type="button"
+            onClick={() => setStatusFilter('needed')}
+            style={{
+              minHeight: 48,
+              padding: '0 18px',
+              borderRadius: 24,
+              border: '1px solid',
+              borderColor: statusFilter === 'needed' ? '#b45309' : '#e2e8f0',
+              backgroundColor: statusFilter === 'needed' ? '#fffbeb' : '#ffffff',
+              color: statusFilter === 'needed' ? '#b45309' : '#475569',
+              fontSize: 13,
+              fontWeight: 600,
+              cursor: 'pointer',
+              whiteSpace: 'nowrap',
+              flexShrink: 0,
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+            }}
+          >
+            <span>Action Needed</span>
+            <span
+              style={{
+                fontSize: 11,
+                padding: '2px 6px',
+                borderRadius: 10,
+                backgroundColor: statusFilter === 'needed' ? '#fde68a' : '#f1f5f9',
+                color: statusFilter === 'needed' ? '#92400e' : '#475569',
+              }}
+            >
+              {countNeeded}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setStatusFilter('attached')}
+            style={{
+              minHeight: 48,
+              padding: '0 18px',
+              borderRadius: 24,
+              border: '1px solid',
+              borderColor: statusFilter === 'attached' ? '#1d4ed8' : '#e2e8f0',
+              backgroundColor: statusFilter === 'attached' ? '#eff6ff' : '#ffffff',
+              color: statusFilter === 'attached' ? '#1d4ed8' : '#475569',
+              fontSize: 13,
+              fontWeight: 600,
+              cursor: 'pointer',
+              whiteSpace: 'nowrap',
+              flexShrink: 0,
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+            }}
+          >
+            <span>Awaiting Review</span>
+            <span
+              style={{
+                fontSize: 11,
+                padding: '2px 6px',
+                borderRadius: 10,
+                backgroundColor: statusFilter === 'attached' ? '#bfdbfe' : '#f1f5f9',
+                color: statusFilter === 'attached' ? '#1e40af' : '#475569',
+              }}
+            >
+              {countAttached}
+            </span>
+          </button>
+        </div>
+
+        {/* ── Search Bar (Min 48px height) ──────────────────────────────────── */}
+        <div style={{ position: 'relative', marginBottom: 16 }}>
+          <Search
+            size={18}
+            style={{
+              position: 'absolute',
+              left: 14,
+              top: '50%',
+              transform: 'translateY(-50%)',
+              color: '#94a3b8',
+              pointerEvents: 'none',
+            }}
+          />
+          <input
+            type="text"
+            placeholder="Search order code, VIN, document..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            style={{
+              width: '100%',
+              minHeight: 48,
+              padding: '0 14px 0 42px',
+              borderRadius: 8,
+              border: '1px solid #cbd5e1',
+              backgroundColor: '#ffffff',
+              color: '#0f172a',
+              fontSize: 14,
+              outline: 'none',
+              boxSizing: 'border-box',
+            }}
+          />
+        </div>
+
+        {/* ── Error Banner ──────────────────────────────────────────────────── */}
+        {error && (
+          <div
+            style={{
+              padding: '12px 16px',
+              borderRadius: 8,
+              backgroundColor: '#fef2f2',
+              border: '1px solid #fecaca',
+              color: '#991b1b',
+              fontSize: 13,
+              marginBottom: 16,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+            }}
+          >
+            <AlertTriangle size={18} />
+            <span>{error}</span>
+          </div>
+        )}
+
+        {/* ── Loading Skeleton / State ──────────────────────────────────────── */}
+        {loading && (
+          <div
+            style={{
+              padding: 48,
+              textAlign: 'center',
+              color: '#64748b',
+              backgroundColor: '#ffffff',
+              borderRadius: 8,
+              border: '1px solid #e2e8f0',
+            }}
+          >
+            <RefreshCw size={24} className="spin-animate" style={{ margin: '0 auto 12px' }} />
+            <div style={{ fontSize: 14, fontWeight: 500 }}>Loading assigned queue...</div>
+          </div>
+        )}
+
+        {/* ── Empty State ───────────────────────────────────────────────────── */}
+        {!loading && filteredLines.length === 0 && (
+          <div
+            style={{
+              padding: 48,
+              textAlign: 'center',
+              backgroundColor: '#ffffff',
+              borderRadius: 8,
+              border: '1px solid #e2e8f0',
+            }}
+          >
+            <Package size={36} color="#94a3b8" style={{ margin: '0 auto 12px' }} />
+            <div style={{ fontSize: 16, fontWeight: 600, color: '#0f172a' }}>No tasks found</div>
+            <div style={{ fontSize: 13, color: '#64748b', marginTop: 4 }}>
+              {statusFilter === 'all'
+                ? 'You have no document lines in your queue at this moment.'
+                : `No tasks found matching status filter "${statusFilter}".`}
+            </div>
+          </div>
+        )}
+
+        {/* ── Mobile-First Stacked Card List (One card per document line) ─── */}
+        {!loading && filteredLines.length > 0 && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {filteredLines.map((line) => {
+              const isNeeded = line.status === 'needed';
+              const isAttached = line.status === 'attached';
+              const hasRejection = Boolean(line.lastRejectionNote);
+
+              return (
+                <div
+                  key={line.id}
+                  style={{
+                    backgroundColor: '#ffffff',
+                    border: '1px solid',
+                    borderColor: hasRejection ? '#fca5a5' : '#e2e8f0',
+                    borderRadius: 8,
+                    padding: 16,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 12,
+                    boxShadow: '0 1px 2px rgba(0, 0, 0, 0.04)',
+                  }}
+                >
+                  {/* Card Header: Doc Name + Status Badge */}
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'flex-start',
+                      justifyContent: 'space-between',
+                      gap: 8,
+                    }}
+                  >
+                    <div>
+                      <div style={{ fontSize: 15, fontWeight: 700, color: '#0f172a', lineHeight: 1.3 }}>
+                        {line.documentType?.fullName || 'Customs Document'}
+                      </div>
+                      <div
                         style={{
-                          borderBottom: '1px solid #273549',
-                          background: line.lastRejectionNote ? 'rgba(220,38,38,0.04)' : undefined,
+                          fontSize: 11,
+                          fontFamily: 'ui-monospace, monospace',
+                          color: '#64748b',
+                          marginTop: 2,
                         }}
                       >
-                        {/* Document */}
-                        <td style={{ padding: '14px 16px' }}>
-                          {/* Rejection revision banner if present */}
-                          {line.lastRejectionNote && (
-                            <div
-                              style={{
-                                marginBottom: 8,
-                                padding: '6px 10px',
-                                borderRadius: 6,
-                                backgroundColor: 'rgba(239, 68, 68, 0.15)',
-                                border: '1px solid rgba(239, 68, 68, 0.3)',
-                                color: '#fca5a5',
-                                fontSize: 11,
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: 6,
-                              }}
-                            >
-                              <AlertTriangle size={13} color="#ef4444" style={{ flexShrink: 0 }} />
-                              <span>
-                                <strong>Admin requested revision:</strong> {line.lastRejectionNote}
-                              </span>
-                            </div>
-                          )}
+                        {line.documentType?.code || line.id}
+                      </div>
+                    </div>
 
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                            <div style={{ fontWeight: 600, color: '#f8fafc' }}>
-                              {line.documentType?.fullName || 'Customs Document'}
-                            </div>
-                          </div>
-                          <div style={{ fontSize: 11, color: '#94a3b8', fontFamily: 'monospace', marginTop: 2 }}>
-                            {line.documentType?.code || line.id}
-                          </div>
+                    {/* Status Badge */}
+                    <div style={{ flexShrink: 0 }}>
+                      {isNeeded ? (
+                        <span
+                          style={{
+                            fontSize: 12,
+                            fontWeight: 600,
+                            padding: '4px 10px',
+                            borderRadius: 14,
+                            backgroundColor: '#fffbeb',
+                            color: '#b45309',
+                            border: '1px solid #fde68a',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 4,
+                          }}
+                        >
+                          <AlertTriangle size={12} />
+                          <span>Action Needed</span>
+                        </span>
+                      ) : isAttached ? (
+                        <span
+                          style={{
+                            fontSize: 12,
+                            fontWeight: 600,
+                            padding: '4px 10px',
+                            borderRadius: 14,
+                            backgroundColor: '#eff6ff',
+                            color: '#1d4ed8',
+                            border: '1px solid #bfdbfe',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 4,
+                          }}
+                        >
+                          <Clock size={12} />
+                          <span>Sent — In Review</span>
+                        </span>
+                      ) : (
+                        <span
+                          style={{
+                            fontSize: 12,
+                            fontWeight: 600,
+                            padding: '4px 10px',
+                            borderRadius: 14,
+                            backgroundColor: '#f1f5f9',
+                            color: '#475569',
+                            border: '1px solid #e2e8f0',
+                          }}
+                        >
+                          {line.status}
+                        </span>
+                      )}
+                    </div>
+                  </div>
 
-                          {/* Uploaded Documents List */}
-                          {line.uploadedFiles && line.uploadedFiles.length > 0 && (
-                            <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 4 }}>
-                              <div style={{ fontSize: 11, color: '#94a3b8', display: 'flex', alignItems: 'center', gap: 4 }}>
-                                <FileText size={11} />
-                                <span>Attached File ({line.uploadedFiles.length}):</span>
-                              </div>
-                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                                {line.uploadedFiles.map((f) => {
-                                  const uploader = f.uploadedBy?.name || 'Associate';
-                                  const uploadDate = f.uploadedAt ? new Date(f.uploadedAt).toLocaleDateString() : '';
-                                  const fileSizeKb = f.size ? `${Math.round(f.size / 1024)} KB` : '';
-                                  return (
-                                    <div
-                                      key={f.id}
-                                      style={{
-                                        display: 'inline-flex',
-                                        alignItems: 'center',
-                                        gap: 6,
-                                        backgroundColor: '#0f172a',
-                                        border: '1px solid #334155',
-                                        borderRadius: 4,
-                                        padding: '2px 8px',
-                                        fontSize: 11,
-                                      }}
-                                    >
-                                      <FileText size={11} color="#d97706" />
-                                      <span
-                                        style={{
-                                          color: '#f8fafc',
-                                          maxWidth: 140,
-                                          overflow: 'hidden',
-                                          textOverflow: 'ellipsis',
-                                          whiteSpace: 'nowrap',
-                                        }}
-                                        title={f.filename}
-                                      >
-                                        {f.filename}
-                                      </span>
-                                      <span style={{ fontSize: 10, color: '#64748b' }}>
-                                        {fileSizeKb && `(${fileSizeKb})`} • {uploader} • {uploadDate}
-                                      </span>
-                                      <button
-                                        type="button"
-                                        onClick={() => handleDownloadFile(f.id, f.filename)}
-                                        style={{
-                                          border: 'none',
-                                          background: 'transparent',
-                                          cursor: 'pointer',
-                                          color: '#38bdf8',
-                                          display: 'inline-flex',
-                                          alignItems: 'center',
-                                          padding: 2,
-                                        }}
-                                        title="View or download document"
-                                      >
-                                        <Download size={11} />
-                                      </button>
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            </div>
-                          )}
-                        </td>
+                  {/* ── Rejection Note: Visible Inline Banner ────────────────── */}
+                  {hasRejection && (
+                    <div
+                      style={{
+                        padding: '10px 12px',
+                        borderRadius: 6,
+                        backgroundColor: '#fef2f2',
+                        border: '1px solid #fecaca',
+                        color: '#991b1b',
+                        fontSize: 12,
+                        lineHeight: 1.4,
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 700, marginBottom: 2 }}>
+                        <AlertTriangle size={14} color="#dc2626" />
+                        <span>Admin Requested Revision</span>
+                      </div>
+                      <div>{line.lastRejectionNote}</div>
+                    </div>
+                  )}
 
-                        {/* Vehicle Info */}
-                        <td style={{ padding: '14px 16px' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                            <span style={{ fontWeight: 700, fontFamily: 'monospace', color: '#38bdf8' }}>
-                              {line.order?.vin || 'VIN N/A'}
-                            </span>
-                            <button
-                              type="button"
-                              onClick={() => handleCopyVin(line.order?.vin)}
-                              title="Copy VIN"
-                              style={{
-                                border: 'none',
-                                background: 'transparent',
-                                color: copiedVin === line.order?.vin ? '#10b981' : '#64748b',
-                                cursor: 'pointer',
-                                padding: 2,
-                              }}
-                            >
-                              {copiedVin === line.order?.vin ? <Check size={13} /> : <Copy size={13} />}
-                            </button>
-                          </div>
-                          <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 2 }}>
-                            {line.order?.carModel || '—'}
-                          </div>
-                        </td>
-
-                        {/* Translation Mode */}
-                        <td style={{ padding: '14px 16px' }}>
-                          <span
+                  {/* ── Order & Vehicle Info Grid ───────────────────────────── */}
+                  <div
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))',
+                      gap: 8,
+                      padding: '10px 12px',
+                      borderRadius: 6,
+                      backgroundColor: '#f8fafc',
+                      border: '1px solid #f1f5f9',
+                      fontSize: 12,
+                    }}
+                  >
+                    {/* Order Code */}
+                    <div>
+                      <div style={{ color: '#64748b', fontSize: 11 }}>Order Code</div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 1 }}>
+                        <span style={{ fontWeight: 600, color: '#0f172a', fontFamily: 'monospace' }}>
+                          {line.order?.trackingCode || '—'}
+                        </span>
+                        {line.order?.trackingCode && (
+                          <button
+                            type="button"
+                            onClick={() => handleCopy(line.order.trackingCode, `order-${line.id}`)}
+                            title="Copy Order Code"
                             style={{
-                              fontSize: 11,
+                              border: 'none',
+                              background: 'transparent',
+                              color: copiedKey === `order-${line.id}` ? '#15803d' : '#64748b',
+                              cursor: 'pointer',
+                              padding: 2,
+                              display: 'inline-flex',
+                            }}
+                          >
+                            {copiedKey === `order-${line.id}` ? <Check size={12} /> : <Copy size={12} />}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* VIN */}
+                    <div>
+                      <div style={{ color: '#64748b', fontSize: 11 }}>Vehicle VIN</div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 1 }}>
+                        <span style={{ fontWeight: 600, color: '#0f172a', fontFamily: 'monospace' }}>
+                          {line.order?.vin || 'N/A'}
+                        </span>
+                        {line.order?.vin && (
+                          <button
+                            type="button"
+                            onClick={() => handleCopy(line.order.vin, `vin-${line.id}`)}
+                            title="Copy VIN"
+                            style={{
+                              border: 'none',
+                              background: 'transparent',
+                              color: copiedKey === `vin-${line.id}` ? '#15803d' : '#64748b',
+                              cursor: 'pointer',
+                              padding: 2,
+                              display: 'inline-flex',
+                            }}
+                          >
+                            {copiedKey === `vin-${line.id}` ? <Check size={12} /> : <Copy size={12} />}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Car Model */}
+                    <div>
+                      <div style={{ color: '#64748b', fontSize: 11 }}>Model</div>
+                      <div style={{ fontWeight: 500, color: '#0f172a', marginTop: 1 }}>
+                        {line.order?.carModel || '—'}
+                      </div>
+                    </div>
+
+                    {/* Translation Mode */}
+                    <div>
+                      <div style={{ color: '#64748b', fontSize: 11 }}>Translation</div>
+                      <div style={{ fontWeight: 500, color: '#0f172a', marginTop: 1 }}>
+                        {line.translationMode === 'original_plus_translation'
+                          ? 'Orig + Translation'
+                          : line.translationMode === 'translation_only'
+                          ? 'Translation Only'
+                          : 'Original Only'}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* ── Attached File Preview / Details (if attached) ───────── */}
+                  {line.uploadedFiles && line.uploadedFiles.length > 0 && (
+                    <div
+                      style={{
+                        padding: '8px 12px',
+                        borderRadius: 6,
+                        backgroundColor: '#ffffff',
+                        border: '1px solid #e2e8f0',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: 8,
+                        fontSize: 12,
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+                        <FileText size={16} color="#a8231b" style={{ flexShrink: 0 }} />
+                        <div style={{ minWidth: 0 }}>
+                          <div
+                            style={{
                               fontWeight: 600,
-                              padding: '2px 8px',
-                              borderRadius: 4,
-                              backgroundColor: '#334155',
-                              color: '#cbd5e1',
+                              color: '#0f172a',
+                              whiteSpace: 'nowrap',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              maxWidth: 220,
                             }}
                           >
-                            {line.translationMode === 'original_plus_translation'
-                              ? 'Orig + Translation'
-                              : line.translationMode === 'translation_only'
-                              ? 'Translation Only'
-                              : 'Original Only'}
-                          </span>
-                        </td>
+                            {line.uploadedFiles[0]?.filename || 'Uploaded Document'}
+                          </div>
+                          <div style={{ fontSize: 11, color: '#64748b' }}>
+                            {line.uploadedFiles[0]?.size
+                              ? `${Math.round(line.uploadedFiles[0].size / 1024)} KB`
+                              : ''}
+                            {line.trackingCode ? ` • Tracking: ${line.trackingCode}` : ''}
+                          </div>
+                        </div>
+                      </div>
 
-                        {/* Tracking Code */}
-                        <td style={{ padding: '14px 16px', fontFamily: 'monospace', color: line.trackingCode ? '#e2e8f0' : '#64748b' }}>
-                          {line.trackingCode ? (
-                            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                              <span>{line.trackingCode}</span>
-                              <button
-                                type="button"
-                                onClick={() => handleCopyTracking(line.trackingCode)}
-                                title="Copy tracking code"
-                                style={{
-                                  border: 'none',
-                                  background: 'transparent',
-                                  color: copiedTracking === line.trackingCode ? '#10b981' : '#64748b',
-                                  cursor: 'pointer',
-                                  padding: 2,
-                                }}
-                              >
-                                {copiedTracking === line.trackingCode ? <Check size={12} /> : <Copy size={12} />}
-                              </button>
-                            </div>
-                          ) : (
-                            '—'
-                          )}
-                        </td>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          handleDownloadFile(line.uploadedFiles[0].id, line.uploadedFiles[0].filename)
+                        }
+                        style={{
+                          minHeight: 48,
+                          minWidth: 48,
+                          padding: '0 8px',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          border: 'none',
+                          background: 'transparent',
+                          color: '#a8231b',
+                          cursor: 'pointer',
+                        }}
+                        title="Download or view file"
+                      >
+                        <Download size={18} />
+                      </button>
+                    </div>
+                  )}
 
-                        {/* Status */}
-                        <td style={{ padding: '14px 16px' }}>
-                          <span
-                            style={{
-                              fontSize: 12,
-                              fontWeight: 700,
-                              padding: '3px 8px',
-                              borderRadius: 12,
-                              backgroundColor:
-                                isNeeded
-                                  ? 'rgba(245, 158, 11, 0.15)'
-                                  : 'rgba(56, 189, 248, 0.15)',
-                              color: isNeeded ? '#f59e0b' : '#38bdf8',
-                              border: `1px solid ${
-                                isNeeded ? 'rgba(245, 158, 11, 0.3)' : 'rgba(56, 189, 248, 0.3)'
-                              }`,
-                            }}
-                          >
-                            {line.status}
-                          </span>
-                        </td>
-
-                        {/* Actions */}
-                        <td style={{ padding: '14px 16px', textAlign: 'right' }}>
-                          {isNeeded ? (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setAttachModalLine(line);
-                                setAttachFile(null);
-                                setAttachTrackingCode(line.trackingCode || '');
-                                setAttachNote('');
-                                setAttachError('');
-                              }}
-                              style={{
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: 6,
-                                padding: '6px 14px',
-                                borderRadius: 6,
-                                border: 'none',
-                                backgroundColor: '#d97706',
-                                color: '#ffffff',
-                                fontWeight: 600,
-                                fontSize: 12,
-                                cursor: 'pointer',
-                              }}
-                            >
-                              <Upload size={13} />
-                              <span>Attach Document</span>
-                            </button>
-                          ) : isAttached ? (
-                            <span
-                              style={{
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: 5,
-                                padding: '4px 10px',
-                                borderRadius: 6,
-                                backgroundColor: '#1e293b',
-                                border: '1px solid #334155',
-                                color: '#94a3b8',
-                                fontSize: 12,
-                                fontWeight: 500,
-                              }}
-                            >
-                              <Clock size={12} color="#38bdf8" />
-                              <span>Sent — awaiting review</span>
-                            </span>
-                          ) : (
-                            <span style={{ color: '#64748b', fontSize: 12 }}>—</span>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
+                  {/* ── Primary Action Button (Min 48px tap target) ─────────── */}
+                  <div>
+                    {isNeeded ? (
+                      <button
+                        type="button"
+                        onClick={() => openAttachModal(line)}
+                        style={{
+                          width: '100%',
+                          minHeight: 48,
+                          borderRadius: 6,
+                          border: 'none',
+                          backgroundColor: '#a8231b',
+                          color: '#ffffff',
+                          fontSize: 14,
+                          fontWeight: 600,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: 8,
+                          cursor: 'pointer',
+                          boxShadow: '0 1px 2px rgba(168, 35, 27, 0.2)',
+                        }}
+                      >
+                        <Camera size={18} />
+                        <span>Attach Document / Photo</span>
+                      </button>
+                    ) : isAttached ? (
+                      <div
+                        style={{
+                          width: '100%',
+                          minHeight: 48,
+                          borderRadius: 6,
+                          border: '1px solid #e2e8f0',
+                          backgroundColor: '#f8fafc',
+                          color: '#475569',
+                          fontSize: 13,
+                          fontWeight: 500,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: 6,
+                        }}
+                      >
+                        <Clock size={16} color="#1d4ed8" />
+                        <span>Sent — Awaiting Admin Review</span>
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </main>
 
-      {/* Attach Document File Modal (Phase 5b: needed → attached) */}
+      {/* ── Attach Modal with Camera Capture & Thumbnail Preview ──────────── */}
       {attachModalLine && (
         <div
           style={{
             position: 'fixed',
             inset: 0,
-            backgroundColor: 'rgba(0, 0, 0, 0.75)',
+            backgroundColor: 'rgba(15, 23, 42, 0.65)',
             display: 'flex',
-            alignItems: 'center',
+            alignItems: 'flex-end',
             justifyContent: 'center',
             zIndex: 100,
-            padding: 16,
+            padding: 0,
+          }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) closeAttachModal();
           }}
         >
           <div
             style={{
-              backgroundColor: '#1e293b',
-              border: '1px solid #334155',
-              borderRadius: 12,
-              width: 'min(480px, 100%)',
-              padding: 24,
+              backgroundColor: '#ffffff',
+              borderTopLeftRadius: 16,
+              borderTopRightRadius: 16,
+              width: '100%',
+              maxWidth: 520,
+              maxHeight: '90vh',
+              overflowY: 'auto',
+              padding: '20px 20px 28px 20px',
+              boxShadow: '0 -4px 20px rgba(0, 0, 0, 0.15)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 16,
             }}
           >
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-              <div style={{ fontSize: 18, fontWeight: 700, color: '#f8fafc' }}>
-                Attach Document
+            {/* Modal Header */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div>
+                <div style={{ fontSize: 17, fontWeight: 700, color: '#0f172a' }}>
+                  Attach Document
+                </div>
+                <div style={{ fontSize: 12, color: '#64748b', marginTop: 1 }}>
+                  {attachModalLine.documentType?.fullName} ({attachModalLine.order?.vin})
+                </div>
               </div>
               <button
                 type="button"
-                onClick={() => setAttachModalLine(null)}
-                style={{ border: 'none', background: 'transparent', color: '#94a3b8', cursor: 'pointer' }}
+                onClick={closeAttachModal}
+                disabled={attachBusy}
+                style={{
+                  minHeight: 48,
+                  minWidth: 48,
+                  border: 'none',
+                  background: 'transparent',
+                  color: '#64748b',
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
               >
-                <X size={18} />
+                <X size={20} />
               </button>
             </div>
 
-            <div style={{ fontSize: 13, color: '#cbd5e1', marginBottom: 16 }}>
-              Attaching document for <strong>{attachModalLine.documentType?.fullName || 'Document'}</strong> ({attachModalLine.order?.vin}).
-            </div>
-
+            {/* Error in Modal */}
             {attachError && (
-              <div style={{ padding: '8px 12px', borderRadius: 6, backgroundColor: 'rgba(239, 68, 68, 0.2)', color: '#f87171', fontSize: 13, marginBottom: 16 }}>
-                {attachError}
+              <div
+                style={{
+                  padding: '10px 14px',
+                  borderRadius: 6,
+                  backgroundColor: '#fef2f2',
+                  border: '1px solid #fecaca',
+                  color: '#991b1b',
+                  fontSize: 13,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                }}
+              >
+                <AlertTriangle size={16} />
+                <span>{attachError}</span>
               </div>
             )}
 
-            <form onSubmit={handleAttachSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-              <div>
-                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#94a3b8', marginBottom: 6 }}>
-                  Document File (Max 12MB) <span style={{ color: '#ef4444' }}>*</span>
-                </label>
-                <input
-                  type="file"
-                  onChange={(e) => setAttachFile(e.target.files?.[0] || null)}
-                  required
-                  style={{
-                    width: '100%',
-                    padding: '8px 12px',
-                    borderRadius: 6,
-                    border: '1px solid #475569',
-                    backgroundColor: '#0f172a',
-                    color: '#f8fafc',
-                    fontSize: 13,
-                    boxSizing: 'border-box',
-                  }}
-                />
-              </div>
+            <form onSubmit={handleAttachSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              {/* Native Mobile Camera File Input */}
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                capture="environment"
+                onChange={handleFileChange}
+                style={{ display: 'none' }}
+              />
 
+              {/* ── Photo Capture Dropzone / Preview ───────────────────────── */}
+              {!attachFile ? (
+                <div
+                  onClick={() => fileInputRef.current?.click()}
+                  style={{
+                    border: '2px dashed #cbd5e1',
+                    borderRadius: 10,
+                    padding: '24px 16px',
+                    textAlign: 'center',
+                    cursor: 'pointer',
+                    backgroundColor: '#f8fafc',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 8,
+                    minHeight: 120,
+                  }}
+                >
+                  <div
+                    style={{
+                      width: 48,
+                      height: 48,
+                      borderRadius: 24,
+                      backgroundColor: '#fef2f2',
+                      color: '#a8231b',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    <Camera size={24} />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 14, fontWeight: 600, color: '#0f172a' }}>
+                      Take Photo or Select File
+                    </div>
+                    <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>
+                      Opens phone camera or gallery (Max 12MB)
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                /* ── Image Thumbnail Preview with Retake Option ──────────── */
+                <div
+                  style={{
+                    borderRadius: 8,
+                    border: '1px solid #e2e8f0',
+                    backgroundColor: '#f8fafc',
+                    padding: 12,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 12,
+                  }}
+                >
+                  {filePreviewUrl ? (
+                    <div style={{ textAlign: 'center' }}>
+                      <img
+                        src={filePreviewUrl}
+                        alt="Document preview"
+                        style={{
+                          width: '100%',
+                          maxHeight: 200,
+                          objectFit: 'contain',
+                          borderRadius: 6,
+                          backgroundColor: '#0f172a',
+                        }}
+                      />
+                    </div>
+                  ) : (
+                    <div
+                      style={{
+                        padding: 24,
+                        textAlign: 'center',
+                        backgroundColor: '#ffffff',
+                        borderRadius: 6,
+                        border: '1px solid #e2e8f0',
+                      }}
+                    >
+                      <FileText size={32} color="#a8231b" style={{ margin: '0 auto 8px' }} />
+                      <div style={{ fontSize: 13, fontWeight: 600, color: '#0f172a' }}>
+                        {attachFile.name}
+                      </div>
+                      <div style={{ fontSize: 11, color: '#64748b' }}>
+                        {Math.round(attachFile.size / 1024)} KB
+                      </div>
+                    </div>
+                  )}
+
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                    <div style={{ fontSize: 12, color: '#475569', minWidth: 0 }}>
+                      <span style={{ fontWeight: 600 }}>Selected: </span>
+                      <span style={{ textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
+                        {attachFile.name}
+                      </span>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      style={{
+                        minHeight: 48,
+                        padding: '0 14px',
+                        borderRadius: 6,
+                        border: '1px solid #e2e8f0',
+                        backgroundColor: '#ffffff',
+                        color: '#475569',
+                        fontSize: 13,
+                        fontWeight: 600,
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 6,
+                        cursor: 'pointer',
+                        flexShrink: 0,
+                      }}
+                    >
+                      <RotateCcw size={14} />
+                      <span>Retake</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* ── Courier Tracking Code (Optional) ───────────────────────── */}
               <div>
-                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#94a3b8', marginBottom: 6 }}>
-                  Courier / Airway Bill Tracking Code (Optional)
+                <label
+                  style={{
+                    display: 'block',
+                    fontSize: 12,
+                    fontWeight: 600,
+                    color: '#475569',
+                    marginBottom: 4,
+                  }}
+                >
+                  Waybill / Tracking Code (Optional)
                 </label>
                 <input
                   type="text"
-                  placeholder="e.g. SF-EXPRESS-1234567, DHL-987654"
+                  placeholder="e.g. SF-EXPRESS-998877, DHL-12345"
                   value={attachTrackingCode}
                   onChange={(e) => setAttachTrackingCode(e.target.value)}
                   style={{
                     width: '100%',
-                    padding: '8px 12px',
+                    minHeight: 48,
+                    padding: '0 12px',
                     borderRadius: 6,
-                    border: '1px solid #475569',
-                    backgroundColor: '#0f172a',
-                    color: '#f8fafc',
-                    fontSize: 13,
+                    border: '1px solid #cbd5e1',
+                    backgroundColor: '#ffffff',
+                    color: '#0f172a',
+                    fontSize: 14,
                     outline: 'none',
                     boxSizing: 'border-box',
                   }}
                 />
               </div>
 
+              {/* ── Logistics Note (Optional) ─────────────────────────────── */}
               <div>
-                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#94a3b8', marginBottom: 6 }}>
-                  Note / Description (Optional)
+                <label
+                  style={{
+                    display: 'block',
+                    fontSize: 12,
+                    fontWeight: 600,
+                    color: '#475569',
+                    marginBottom: 4,
+                  }}
+                >
+                  Note (Optional)
                 </label>
                 <textarea
                   rows={2}
-                  placeholder="e.g. Scanned export certificate attached..."
+                  placeholder="e.g. Fresh scan from exporter office..."
                   value={attachNote}
                   onChange={(e) => setAttachNote(e.target.value)}
                   style={{
                     width: '100%',
-                    padding: '8px 12px',
+                    minHeight: 48,
+                    padding: '10px 12px',
                     borderRadius: 6,
-                    border: '1px solid #475569',
-                    backgroundColor: '#0f172a',
-                    color: '#f8fafc',
+                    border: '1px solid #cbd5e1',
+                    backgroundColor: '#ffffff',
+                    color: '#0f172a',
                     fontSize: 13,
                     outline: 'none',
                     boxSizing: 'border-box',
@@ -766,40 +1155,56 @@ export default function ChinaPortalPage() {
                 />
               </div>
 
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 10 }}>
+              {/* ── Action Buttons ─────────────────────────────────────────── */}
+              <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
                 <button
                   type="button"
-                  onClick={() => setAttachModalLine(null)}
+                  onClick={closeAttachModal}
+                  disabled={attachBusy}
                   style={{
-                    padding: '8px 16px',
+                    flex: 1,
+                    minHeight: 48,
                     borderRadius: 6,
-                    border: '1px solid #475569',
-                    backgroundColor: 'transparent',
-                    color: '#94a3b8',
-                    cursor: 'pointer',
+                    border: '1px solid #cbd5e1',
+                    backgroundColor: '#ffffff',
+                    color: '#475569',
+                    fontSize: 14,
+                    fontWeight: 600,
+                    cursor: attachBusy ? 'not-allowed' : 'pointer',
                   }}
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  disabled={attachBusy}
+                  disabled={attachBusy || !attachFile}
                   style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 6,
-                    padding: '8px 20px',
+                    flex: 2,
+                    minHeight: 48,
                     borderRadius: 6,
                     border: 'none',
-                    backgroundColor: '#d97706',
+                    backgroundColor: attachBusy || !attachFile ? '#cbd5e1' : '#a8231b',
                     color: '#ffffff',
+                    fontSize: 14,
                     fontWeight: 600,
-                    cursor: attachBusy ? 'not-allowed' : 'pointer',
-                    opacity: attachBusy ? 0.7 : 1,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 8,
+                    cursor: attachBusy || !attachFile ? 'not-allowed' : 'pointer',
                   }}
                 >
-                  {attachBusy && <RefreshCw size={14} className="spin-animate" />}
-                  <span>Upload & Attach</span>
+                  {attachBusy ? (
+                    <>
+                      <RefreshCw size={16} className="spin-animate" />
+                      <span>Uploading...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Upload size={16} />
+                      <span>Confirm & Attach</span>
+                    </>
+                  )}
                 </button>
               </div>
             </form>
