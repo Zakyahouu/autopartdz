@@ -77,12 +77,6 @@ export default function OrderDetailPage() {
   // Delete confirmation modal
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
 
-  // Attach file modal
-  const [attachModalLine, setAttachModalLine] = useState(null);
-  const [attachFile, setAttachFile] = useState(null);
-  const [attachNote, setAttachNote] = useState('');
-  const [attachBusy, setAttachBusy] = useState(false);
-  const [attachError, setAttachError] = useState('');
 
   // Reject correction modal
   const [rejectModalOpen, setRejectModalOpen] = useState(false);
@@ -315,39 +309,6 @@ export default function OrderDetailPage() {
     }
   };
 
-  // Attach document file submit (without status change)
-  const handleAttachSubmit = async (e) => {
-    e.preventDefault();
-    if (!attachFile) {
-      setAttachError('Please select a file to attach.');
-      return;
-    }
-    setAttachBusy(true);
-    setAttachError('');
-    try {
-      const formData = new FormData();
-      formData.append('file', attachFile);
-      if (attachNote.trim()) formData.append('note', attachNote.trim());
-
-      const token = localStorage.getItem('autopartdz_token');
-      const res = await fetch(`/api/order-lines/${attachModalLine._id}/files`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
-        body: formData,
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to attach file');
-
-      setAttachModalLine(null);
-      setAttachFile(null);
-      setAttachNote('');
-      loadOrderDetail();
-    } catch (err) {
-      setAttachError(err.message);
-    } finally {
-      setAttachBusy(false);
-    }
-  };
 
   // Download / View file helper
   const handleDownloadFile = async (fileId, filename) => {
@@ -949,199 +910,56 @@ export default function OrderDetailPage() {
                         </button>
                       ) : (
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6, flexWrap: 'wrap' }}>
-                          {/* Attach File (without status change) */}
-                          <button
-                            type="button"
-                            className="btn-admin-secondary"
-                            onClick={() => {
-                              setAttachModalLine(line);
-                              setAttachFile(null);
-                              setAttachNote('');
-                              setAttachError('');
-                            }}
-                            style={{ padding: '4px 8px', fontSize: 11, display: 'inline-flex', alignItems: 'center', gap: 4 }}
-                            title="Attach document scan / file to line"
-                          >
-                            <Paperclip size={11} />
-                            <span>Attach</span>
-                          </button>
-
-                          {/* Admin Proxy Sourcing / Printing / Delay Actions */}
-                          {line.source === 'china' && ['needed', 'sent_to_china', 'needs_correction'].includes(line.status) && (
+                          {line.status === 'needed' && (
                             <button
                               type="button"
                               className="btn-admin-secondary"
                               onClick={() => {
-                                setProxyShipLine(line);
-                                setProxyShipTrackingCode('');
-                                setProxyShipNote('');
-                                setProxyShipFile(null);
-                                setProxyShipError('');
+                                setAdminAttachLine(line);
+                                setAdminAttachFile(null);
+                                setAdminAttachTracking(line.trackingCode || '');
+                                setAdminAttachNote('');
+                                setAdminAttachError('');
                               }}
                               style={{ padding: '4px 8px', fontSize: 11, display: 'inline-flex', alignItems: 'center', gap: 4 }}
-                              title="Ship on behalf of China (Proxy)"
+                              title="Attach document scan / file to line"
                             >
-                              <Send size={11} />
-                              <span>Ship</span>
+                              <Paperclip size={11} />
+                              <span>Attach</span>
                             </button>
                           )}
 
-                          {/* ── Phase 5: Review buttons for shipped china lines ── */}
-                          {line.source === 'china' && line.status === 'shipped' && (
-                            <>
-                              {/* File visibility warning if no files */}
-                              {(!line.uploadedFiles || line.uploadedFiles.length === 0) && (
-                                <span
-                                  style={{
-                                    fontSize: 10,
-                                    fontWeight: 700,
-                                    color: '#dc2626',
-                                    background: 'rgba(220,38,38,0.08)',
-                                    border: '1px solid rgba(220,38,38,0.25)',
-                                    borderRadius: 4,
-                                    padding: '2px 6px',
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                    gap: 3,
-                                  }}
-                                  title="No file uploaded — review carefully before approving"
-                                >
-                                  <AlertTriangle size={10} /> No file
-                                </span>
-                              )}
-                              <button
-                                type="button"
-                                className="btn-admin-secondary"
-                                onClick={() => {
-                                  setReviewLine(line);
-                                  setReviewDecision('approve');
-                                  setReviewNote('');
-                                  setReviewError('');
-                                }}
-                                style={{
-                                  padding: '4px 8px',
-                                  fontSize: 11,
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  gap: 4,
-                                  borderColor: '#16a34a',
-                                  color: '#16a34a',
-                                }}
-                                title="Approve shipment — mark arrived at office"
-                              >
-                                <ThumbsUp size={11} />
-                                <span>Approve</span>
-                              </button>
-                              <button
-                                type="button"
-                                className="btn-admin-secondary"
-                                onClick={() => {
-                                  setReviewLine(line);
-                                  setReviewDecision('reject');
-                                  setReviewNote('');
-                                  setReviewError('');
-                                }}
-                                style={{
-                                  padding: '4px 8px',
-                                  fontSize: 11,
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  gap: 4,
-                                  borderColor: '#dc2626',
-                                  color: '#dc2626',
-                                }}
-                                title="Reject — send back to China associate for correction"
-                              >
-                                <ThumbsDown size={11} />
-                                <span>Reject</span>
-                              </button>
-                              <button
-                                type="button"
-                                className="btn-admin-secondary"
-                                onClick={() => {
-                                  setProxyDelayLine(line);
-                                  setProxyDelayIsDelayed(!line.isDelayed);
-                                  setProxyDelayNote('');
-                                  setProxyDelayError('');
-                                }}
-                                style={{
-                                  padding: '4px 8px',
-                                  fontSize: 11,
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  gap: 4,
-                                  borderColor: line.isDelayed ? '#16a34a' : '#f59e0b',
-                                  color: line.isDelayed ? '#16a34a' : '#b45309',
-                                }}
-                                title="Toggle transit delay flag"
-                              >
-                                <AlertTriangle size={11} />
-                                <span>{line.isDelayed ? 'Clear Delay' : 'Flag Delay'}</span>
-                              </button>
-                            </>
-                          )}
-
-                          {/* ── Phase 5: needs_correction label with rejection note ── */}
-                          {line.status === 'needs_correction' && (() => {
-                            const rejEntry = [...(line.activityLog || [])].reverse().find(e => e.action === 'rejected');
-                            return (
-                              <div style={{
-                                fontSize: 11,
-                                background: 'rgba(220,38,38,0.07)',
-                                border: '1px solid rgba(220,38,38,0.25)',
-                                borderRadius: 4,
-                                padding: '4px 8px',
-                                color: '#dc2626',
-                                maxWidth: 200,
-                              }}>
-                                <div style={{ fontWeight: 700, marginBottom: 2, display: 'flex', alignItems: 'center', gap: 4 }}><AlertTriangle size={11} /> Needs Correction</div>
-                                {rejEntry?.note && (
-                                  <div style={{ color: '#7f1d1d' }}>Admin note: {rejEntry.note}</div>
-                                )}
-                                <div style={{ color: '#92400e', marginTop: 2 }}>Awaiting re-shipment from China</div>
-                              </div>
-                            );
-                          })()}
-
-                          {line.source === 'local' && line.status === 'needed' && (
+                          {line.status === 'attached' && (
                             <button
                               type="button"
-                              className="btn-admin-secondary"
+                              className="btn-admin-primary"
                               onClick={() => {
-                                setProxyPrintLine(line);
-                                setProxyPrintNote('');
-                                setProxyPrintFile(null);
-                                setProxyPrintError('');
+                                setLockLine(line);
+                                setLockApprove(true);
+                                setLockNote('');
+                                setLockError('');
                               }}
                               style={{ padding: '4px 8px', fontSize: 11, display: 'inline-flex', alignItems: 'center', gap: 4 }}
-                              title="Mark document printed locally"
+                              title="Review and lock document line"
                             >
-                              <Printer size={11} />
-                              <span>Mark Printed</span>
+                              <Lock size={11} />
+                              <span>Review & Lock</span>
                             </button>
                           )}
 
-                          {/* ── Phase 5: Mark Arrived for local printed lines ── */}
-                          {line.source === 'local' && line.status === 'printed' && (
-                            <button
-                              type="button"
-                              className="btn-admin-secondary"
-                              onClick={() => handleMarkArrived(line._id)}
-                              disabled={arrivedBusyId === line._id}
+                          {['ready', 'packaged', 'sent_to_client', 'delivered', 'completed'].includes(line.status) && (
+                            <span
+                              className="admin-doc-chip"
                               style={{
-                                padding: '4px 8px',
                                 fontSize: 11,
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: 4,
-                                borderColor: '#7c3aed',
-                                color: '#7c3aed',
+                                color: '#16a34a',
+                                borderColor: 'rgba(22, 163, 74, 0.3)',
+                                backgroundColor: 'rgba(22, 163, 74, 0.08)',
                               }}
-                              title="Mark document as arrived at office"
                             >
-                              <MapPin size={11} />
-                              <span>{arrivedBusyId === line._id ? 'Saving…' : 'Mark Arrived'}</span>
-                            </button>
+                              <CheckCircle2 size={11} style={{ marginRight: 3 }} />
+                              {line.status === 'ready' ? 'Ready' : line.status.replace(/_/g, ' ')}
+                            </span>
                           )}
                         </div>
                       )}
@@ -1307,228 +1125,27 @@ export default function OrderDetailPage() {
         </div>
       )}
 
-      {/* Proxy Ship Document Modal (Admin Fallback) */}
-      {proxyShipLine && (
-        <div className="admin-modal-backdrop" onClick={(e) => { if (e.target === e.currentTarget) setProxyShipLine(null); }}>
-          <div className="admin-modal-panel" role="dialog" aria-modal="true" style={{ width: 480 }}>
-            <div className="admin-modal-header">
-              <h2 className="admin-modal-title">Ship Line on Behalf of China</h2>
-              <button type="button" className="btn-admin-icon" onClick={() => setProxyShipLine(null)}>
-                <X size={16} />
-              </button>
-            </div>
-
-            <form onSubmit={handleProxyShipSubmit}>
-              <div className="admin-modal-body">
-                <div style={{ fontSize: 13, color: 'var(--admin-text-secondary)', marginBottom: 16 }}>
-                  Recording shipment for <strong>{proxyShipLine.documentTypeId?.fullName || 'Document'}</strong> (WhatsApp/WeChat Proxy Fallback).
-                </div>
-
-                {proxyShipError && (
-                  <div className="admin-alert admin-alert-error" style={{ marginBottom: 12 }}>
-                    <AlertTriangle size={14} />
-                    <span>{proxyShipError}</span>
-                  </div>
-                )}
-
-                <div className="admin-form-group">
-                  <label className="admin-form-label">
-                    Courier Tracking Code <span className="required">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    className="admin-input"
-                    placeholder="e.g. SF-EXPRESS-998877, DHL-123456"
-                    value={proxyShipTrackingCode}
-                    onChange={(e) => setProxyShipTrackingCode(e.target.value)}
-                    required
-                  />
-                </div>
-
-                <div className="admin-form-group">
-                  <label className="admin-form-label">
-                    Upload Waybill / Airway Scan (Optional, max 12MB)
-                  </label>
-                  <input
-                    type="file"
-                    className="admin-input"
-                    onChange={(e) => setProxyShipFile(e.target.files?.[0] || null)}
-                    style={{ padding: '6px' }}
-                  />
-                </div>
-
-                <div className="admin-form-group">
-                  <label className="admin-form-label">Internal Note (Optional)</label>
-                  <textarea
-                    className="admin-textarea"
-                    rows={2}
-                    placeholder="e.g. Tracking code confirmed via associate chat..."
-                    value={proxyShipNote}
-                    onChange={(e) => setProxyShipNote(e.target.value)}
-                  />
-                </div>
-              </div>
-
-              <div className="admin-modal-footer">
-                <button type="button" className="btn-admin-secondary" onClick={() => setProxyShipLine(null)}>
-                  Cancel
-                </button>
-                <button type="submit" className="btn-admin-primary" disabled={proxyShipBusy}>
-                  {proxyShipBusy ? 'Saving…' : 'Record Shipment'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Proxy Print Local Document Modal */}
-      {proxyPrintLine && (
-        <div className="admin-modal-backdrop" onClick={(e) => { if (e.target === e.currentTarget) setProxyPrintLine(null); }}>
-          <div className="admin-modal-panel" role="dialog" aria-modal="true" style={{ width: 480 }}>
-            <div className="admin-modal-header">
-              <h2 className="admin-modal-title">Mark Local Document Printed</h2>
-              <button type="button" className="btn-admin-icon" onClick={() => setProxyPrintLine(null)}>
-                <X size={16} />
-              </button>
-            </div>
-
-            <form onSubmit={handleProxyPrintSubmit}>
-              <div className="admin-modal-body">
-                <div style={{ fontSize: 13, color: 'var(--admin-text-secondary)', marginBottom: 16 }}>
-                  Marking <strong>{proxyPrintLine.documentTypeId?.fullName || 'Document'}</strong> as printed and ready locally.
-                </div>
-
-                {proxyPrintError && (
-                  <div className="admin-alert admin-alert-error" style={{ marginBottom: 12 }}>
-                    <AlertTriangle size={14} />
-                    <span>{proxyPrintError}</span>
-                  </div>
-                )}
-
-                <div className="admin-form-group">
-                  <label className="admin-form-label">
-                    Upload Scanned Print / Proof (Optional, max 12MB)
-                  </label>
-                  <input
-                    type="file"
-                    className="admin-input"
-                    onChange={(e) => setProxyPrintFile(e.target.files?.[0] || null)}
-                    style={{ padding: '6px' }}
-                  />
-                </div>
-
-                <div className="admin-form-group">
-                  <label className="admin-form-label">Office Note (Optional)</label>
-                  <textarea
-                    className="admin-textarea"
-                    rows={2}
-                    placeholder="e.g. Printed at main agency desk..."
-                    value={proxyPrintNote}
-                    onChange={(e) => setProxyPrintNote(e.target.value)}
-                  />
-                </div>
-              </div>
-
-              <div className="admin-modal-footer">
-                <button type="button" className="btn-admin-secondary" onClick={() => setProxyPrintLine(null)}>
-                  Cancel
-                </button>
-                <button type="submit" className="btn-admin-primary" disabled={proxyPrintBusy}>
-                  {proxyPrintBusy ? 'Saving…' : 'Mark Printed'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Proxy Delay Toggle Modal */}
-      {proxyDelayLine && (
-        <div className="admin-modal-backdrop" onClick={(e) => { if (e.target === e.currentTarget) setProxyDelayLine(null); }}>
-          <div className="admin-modal-panel" role="dialog" aria-modal="true" style={{ width: 460 }}>
-            <div className="admin-modal-header">
-              <h2 className="admin-modal-title">
-                {proxyDelayIsDelayed ? 'Flag Document Transit Delay' : 'Clear Transit Delay'}
-              </h2>
-              <button type="button" className="btn-admin-icon" onClick={() => setProxyDelayLine(null)}>
-                <X size={16} />
-              </button>
-            </div>
-
-            <form onSubmit={handleProxyDelaySubmit}>
-              <div className="admin-modal-body">
-                <div style={{ fontSize: 13, color: 'var(--admin-text-secondary)', marginBottom: 16 }}>
-                  {proxyDelayIsDelayed ? (
-                    <span>
-                      Flagging this line as <strong>Delayed</strong> will show an amber warning on the public tracking portal to notify the importer.
-                    </span>
-                  ) : (
-                    <span>Clearing the delay flag indicates transit has normalized.</span>
-                  )}
-                </div>
-
-                {proxyDelayError && (
-                  <div className="admin-alert admin-alert-error" style={{ marginBottom: 12 }}>
-                    <AlertTriangle size={14} />
-                    <span>{proxyDelayError}</span>
-                  </div>
-                )}
-
-                <div className="admin-form-group">
-                  <label className="admin-form-label">Delay Reason / Note (Optional)</label>
-                  <textarea
-                    className="admin-textarea"
-                    rows={2}
-                    placeholder="e.g. Customs inspection flight backlog in Dubai..."
-                    value={proxyDelayNote}
-                    onChange={(e) => setProxyDelayNote(e.target.value)}
-                  />
-                </div>
-              </div>
-
-              <div className="admin-modal-footer">
-                <button type="button" className="btn-admin-secondary" onClick={() => setProxyDelayLine(null)}>
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="btn-admin-primary"
-                  disabled={proxyDelayBusy}
-                  style={{
-                    backgroundColor: proxyDelayIsDelayed ? '#dc2626' : '#16a34a',
-                    borderColor: proxyDelayIsDelayed ? '#dc2626' : '#16a34a',
-                  }}
-                >
-                  {proxyDelayBusy ? 'Saving…' : proxyDelayIsDelayed ? 'Confirm Delay Flag' : 'Clear Delay Flag'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Attach Document File Modal (Admin) */}
-      {attachModalLine && (
-        <div className="admin-modal-backdrop" onClick={(e) => { if (e.target === e.currentTarget) setAttachModalLine(null); }}>
+      {/* Admin Attach Modal */}
+      {adminAttachLine && (
+        <div className="admin-modal-backdrop" onClick={(e) => { if (e.target === e.currentTarget) setAdminAttachLine(null); }}>
           <div className="admin-modal-panel" role="dialog" aria-modal="true" style={{ width: 480 }}>
             <div className="admin-modal-header">
               <h2 className="admin-modal-title">Attach Document to Line</h2>
-              <button type="button" className="btn-admin-icon" onClick={() => setAttachModalLine(null)}>
+              <button type="button" className="btn-admin-icon" onClick={() => setAdminAttachLine(null)}>
                 <X size={16} />
               </button>
             </div>
 
-            <form onSubmit={handleAttachSubmit}>
+            <form onSubmit={handleAdminAttachSubmit}>
               <div className="admin-modal-body">
                 <div style={{ fontSize: 13, color: 'var(--admin-text-secondary)', marginBottom: 16 }}>
-                  Attaching file to <strong>{attachModalLine.documentTypeId?.fullName || 'Document'}</strong> without changing the line status.
+                  Attaching document for <strong>{adminAttachLine.documentTypeId?.fullName || 'Document'}</strong>. This will transition the line to <strong>attached</strong>.
                 </div>
 
-                {attachError && (
+                {adminAttachError && (
                   <div className="admin-alert admin-alert-error" style={{ marginBottom: 12 }}>
                     <AlertTriangle size={14} />
-                    <span>{attachError}</span>
+                    <span>{adminAttachError}</span>
                   </div>
                 )}
 
@@ -1539,9 +1156,20 @@ export default function OrderDetailPage() {
                   <input
                     type="file"
                     className="admin-input"
-                    onChange={(e) => setAttachFile(e.target.files?.[0] || null)}
+                    onChange={(e) => setAdminAttachFile(e.target.files?.[0] || null)}
                     style={{ padding: '6px' }}
                     required
+                  />
+                </div>
+
+                <div className="admin-form-group">
+                  <label className="admin-form-label">Tracking Code (Optional)</label>
+                  <input
+                    type="text"
+                    className="admin-input"
+                    placeholder="e.g. SF123456789"
+                    value={adminAttachTracking}
+                    onChange={(e) => setAdminAttachTracking(e.target.value)}
                   />
                 </div>
 
@@ -1550,19 +1178,19 @@ export default function OrderDetailPage() {
                   <textarea
                     className="admin-textarea"
                     rows={2}
-                    placeholder="e.g. Corrected scan, official stamped copy..."
-                    value={attachNote}
-                    onChange={(e) => setAttachNote(e.target.value)}
+                    placeholder="e.g. Scanned copy received..."
+                    value={adminAttachNote}
+                    onChange={(e) => setAdminAttachNote(e.target.value)}
                   />
                 </div>
               </div>
 
               <div className="admin-modal-footer">
-                <button type="button" className="btn-admin-secondary" onClick={() => setAttachModalLine(null)}>
+                <button type="button" className="btn-admin-secondary" onClick={() => setAdminAttachLine(null)}>
                   Cancel
                 </button>
-                <button type="submit" className="btn-admin-primary" disabled={attachBusy}>
-                  {attachBusy ? 'Uploading…' : 'Upload File'}
+                <button type="submit" className="btn-admin-primary" disabled={adminAttachBusy || !adminAttachFile}>
+                  {adminAttachBusy ? 'Uploading…' : 'Attach Document'}
                 </button>
               </div>
             </form>
@@ -1570,34 +1198,33 @@ export default function OrderDetailPage() {
         </div>
       )}
 
-      {/* ── Phase 5: Review Modal (Approve / Reject) ─────────────────────── */}
-      {reviewLine && (
-        <div className="admin-modal-backdrop" onClick={(e) => { if (e.target === e.currentTarget) setReviewLine(null); }}>
+      {/* Lock Modal (Approve or Reject Attached Line) */}
+      {lockLine && (
+        <div className="admin-modal-backdrop" onClick={(e) => { if (e.target === e.currentTarget) setLockLine(null); }}>
           <div className="admin-modal-panel" role="dialog" aria-modal="true" style={{ width: 500 }}>
             <div className="admin-modal-header">
               <h2 className="admin-modal-title">
-                {reviewDecision === 'approve' ? 'Approve Shipment' : 'Reject & Request Correction'}
+                {lockApprove ? 'Approve & Lock Document' : 'Reject Document & Request Revision'}
               </h2>
-              <button type="button" className="btn-admin-icon" onClick={() => setReviewLine(null)}>
+              <button type="button" className="btn-admin-icon" onClick={() => setLockLine(null)}>
                 <X size={16} />
               </button>
             </div>
 
-            <form onSubmit={handleReviewSubmit}>
+            <form onSubmit={handleLockSubmit}>
               <div className="admin-modal-body">
-                {/* Uploaded files — must be visible before making decision */}
-                <div style={{ marginBottom: 16 }}>
-                  <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--admin-text-secondary)', marginBottom: 6, textTransform: 'uppercase' }}>
-                    Uploaded Files ({(reviewLine.uploadedFiles || []).length})
-                  </div>
-                  {(!reviewLine.uploadedFiles || reviewLine.uploadedFiles.length === 0) ? (
-                    <div className="admin-alert admin-alert-error" style={{ padding: '8px 12px' }}>
-                      <AlertTriangle size={14} />
-                      <span>No file has been uploaded for this line. Review carefully before approving.</span>
+                <div style={{ fontSize: 13, color: 'var(--admin-text-secondary)', marginBottom: 16 }}>
+                  Reviewing <strong>{lockLine.documentTypeId?.fullName || 'Document'}</strong>.
+                </div>
+
+                {/* Show uploaded files preview */}
+                {lockLine.uploadedFiles && lockLine.uploadedFiles.length > 0 && (
+                  <div style={{ marginBottom: 16 }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--admin-text-secondary)', marginBottom: 6, textTransform: 'uppercase' }}>
+                      Attached Files ({lockLine.uploadedFiles.length})
                     </div>
-                  ) : (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                      {reviewLine.uploadedFiles.map((f) => (
+                      {lockLine.uploadedFiles.map((f) => (
                         <div
                           key={f._id}
                           style={{
@@ -1612,23 +1239,19 @@ export default function OrderDetailPage() {
                           }}
                         >
                           <FileText size={14} color="var(--admin-accent)" />
-                          <span style={{ flex: 1, fontWeight: 600 }} title={f.filename}>{f.filename}</span>
-                          <span style={{ fontSize: 11, color: 'var(--admin-text-muted)' }}>
-                            {f.size ? `${Math.round(f.size / 1024)} KB` : ''}
-                          </span>
+                          <span style={{ flex: 1, fontWeight: 600 }}>{f.filename}</span>
                           <button
                             type="button"
                             onClick={() => handleDownloadFile(f._id, f.filename)}
                             style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--admin-accent)', display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 11 }}
-                            title="Download / View"
                           >
                             <Download size={13} /> View
                           </button>
                         </div>
                       ))}
                     </div>
-                  )}
-                </div>
+                  </div>
+                )}
 
                 {/* Decision toggle */}
                 <div className="admin-form-group">
@@ -1636,14 +1259,14 @@ export default function OrderDetailPage() {
                   <div style={{ display: 'flex', gap: 8 }}>
                     <button
                       type="button"
-                      onClick={() => setReviewDecision('approve')}
+                      onClick={() => setLockApprove(true)}
                       style={{
                         flex: 1,
                         padding: '8px 0',
                         borderRadius: 6,
-                        border: `2px solid ${reviewDecision === 'approve' ? '#16a34a' : 'var(--admin-border)'}`,
-                        background: reviewDecision === 'approve' ? 'rgba(22,163,74,0.08)' : 'transparent',
-                        color: reviewDecision === 'approve' ? '#16a34a' : 'var(--admin-text-secondary)',
+                        border: `2px solid ${lockApprove ? '#16a34a' : 'var(--admin-border)'}`,
+                        background: lockApprove ? 'rgba(22,163,74,0.08)' : 'transparent',
+                        color: lockApprove ? '#16a34a' : 'var(--admin-text-secondary)',
                         fontWeight: 700,
                         fontSize: 13,
                         cursor: 'pointer',
@@ -1653,18 +1276,18 @@ export default function OrderDetailPage() {
                         gap: 6,
                       }}
                     >
-                      <ThumbsUp size={14} /> Approve
+                      <CheckCircle2 size={14} /> Approve & Lock
                     </button>
                     <button
                       type="button"
-                      onClick={() => setReviewDecision('reject')}
+                      onClick={() => setLockApprove(false)}
                       style={{
                         flex: 1,
                         padding: '8px 0',
                         borderRadius: 6,
-                        border: `2px solid ${reviewDecision === 'reject' ? '#dc2626' : 'var(--admin-border)'}`,
-                        background: reviewDecision === 'reject' ? 'rgba(220,38,38,0.08)' : 'transparent',
-                        color: reviewDecision === 'reject' ? '#dc2626' : 'var(--admin-text-secondary)',
+                        border: `2px solid ${!lockApprove ? '#dc2626' : 'var(--admin-border)'}`,
+                        background: !lockApprove ? 'rgba(220,38,38,0.08)' : 'transparent',
+                        color: !lockApprove ? '#dc2626' : 'var(--admin-text-secondary)',
                         fontWeight: 700,
                         fontSize: 13,
                         cursor: 'pointer',
@@ -1674,50 +1297,48 @@ export default function OrderDetailPage() {
                         gap: 6,
                       }}
                     >
-                      <ThumbsDown size={14} /> Reject
+                      <X size={14} /> Reject
                     </button>
                   </div>
                 </div>
 
                 <div className="admin-form-group">
                   <label className="admin-form-label">
-                    {reviewDecision === 'reject' ? 'Rejection Note (Required — China associate will see this)' : 'Note (Optional)'}
-                    {reviewDecision === 'reject' && <span className="required"> *</span>}
+                    {!lockApprove ? 'Rejection Reason (Required — associate will see this)' : 'Note (Optional)'}
+                    {!lockApprove && <span className="required"> *</span>}
                   </label>
                   <textarea
                     className="admin-textarea"
                     rows={3}
-                    placeholder={reviewDecision === 'reject'
-                      ? 'Explain exactly what needs to be corrected and re-shipped…'
-                      : 'Optional approval note…'}
-                    value={reviewNote}
-                    onChange={(e) => setReviewNote(e.target.value)}
-                    required={reviewDecision === 'reject'}
+                    placeholder={!lockApprove ? 'Explain what needs correction…' : 'Optional note…'}
+                    value={lockNote}
+                    onChange={(e) => setLockNote(e.target.value)}
+                    required={!lockApprove}
                   />
                 </div>
 
-                {reviewError && (
+                {lockError && (
                   <div className="admin-alert admin-alert-error" style={{ marginBottom: 4 }}>
                     <AlertTriangle size={14} />
-                    <span>{reviewError}</span>
+                    <span>{lockError}</span>
                   </div>
                 )}
               </div>
 
               <div className="admin-modal-footer">
-                <button type="button" className="btn-admin-secondary" onClick={() => setReviewLine(null)}>
+                <button type="button" className="btn-admin-secondary" onClick={() => setLockLine(null)}>
                   Cancel
                 </button>
                 <button
                   type="submit"
                   className="btn-admin-primary"
-                  disabled={reviewBusy || (reviewDecision === 'reject' && !reviewNote.trim())}
+                  disabled={lockBusy || (!lockApprove && !lockNote.trim())}
                   style={{
-                    backgroundColor: reviewDecision === 'approve' ? '#16a34a' : '#dc2626',
-                    borderColor: reviewDecision === 'approve' ? '#16a34a' : '#dc2626',
+                    backgroundColor: lockApprove ? '#16a34a' : '#dc2626',
+                    borderColor: lockApprove ? '#16a34a' : '#dc2626',
                   }}
                 >
-                  {reviewBusy ? 'Saving…' : reviewDecision === 'approve' ? 'Confirm Approval' : 'Confirm Rejection'}
+                  {lockBusy ? 'Saving…' : lockApprove ? 'Confirm Approval' : 'Confirm Rejection'}
                 </button>
               </div>
             </form>
