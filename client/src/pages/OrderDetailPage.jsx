@@ -44,6 +44,8 @@ export default function OrderDetailPage() {
   const [associates, setAssociates] = useState([]);
   // Line assignees: map of lineId -> userId
   const [lineAssignees, setLineAssignees] = useState({});
+  // Line sources: map of lineId -> source ('local' | 'china')
+  const [lineSources, setLineSources] = useState({});
 
   // Lock modal (approve / reject attached line)
   const [lockLine, setLockLine] = useState(null);
@@ -93,11 +95,14 @@ export default function OrderDetailPage() {
     const { ok, data } = await apiFetch(`/orders/${id}`);
     if (ok && data) {
       setOrder(data);
-      // Initialize assignees from new field name
+      // Initialize sources and assignees from line data
+      const sources = {};
       const assignees = {};
       (data.lines || []).forEach((l) => {
+        sources[l._id] = l.source || '';
         assignees[l._id] = l.assignedAssociateId?._id || l.assignedAssociateId || '';
       });
+      setLineSources(sources);
       setLineAssignees(assignees);
     } else {
       setError(data?.error || 'Failed to load order details.');
@@ -136,6 +141,13 @@ export default function OrderDetailPage() {
       if (res.ok) loadOrderDetail();
       else alert(res.data?.error || 'Failed to update line assignment.');
     }
+  };
+
+  const handleSourceChange = (lineId, newSource) => {
+    setLineSources((prev) => ({
+      ...prev,
+      [lineId]: newSource === '' ? null : newSource,
+    }));
   };
 
   const handleRemoveLine = async (lineId) => {
@@ -187,10 +199,12 @@ export default function OrderDetailPage() {
 
   const handleConfirmOrder = async () => {
     setActionLoading(true);
-    // Submit any pending assignee updates alongside the confirm call
-    const lineUpdates = Object.entries(lineAssignees)
-      .filter(([, v]) => v)
-      .map(([lineId, associateId]) => ({ lineId, associateId }));
+    // Submit any pending source and assignee updates alongside the confirm call
+    const lineUpdates = (order?.lines || []).map((l) => ({
+      lineId: l._id,
+      source: lineSources[l._id] || l.source || null,
+      associateId: lineAssignees[l._id] || null,
+    }));
 
     const res = await apiFetch(`/orders/${id}/confirm`, {
       method: 'PATCH',
@@ -397,7 +411,7 @@ export default function OrderDetailPage() {
 
   const isPending = order.status === 'pending';
   const lines = order.lines || [];
-  const linesMissingSourceCount = lines.filter((l) => !lineSources[l._id]).length;
+  const linesMissingSourceCount = lines.filter((l) => !(lineSources[l._id] || l.source)).length;
 
   return (
     <div>
@@ -725,9 +739,9 @@ export default function OrderDetailPage() {
               </tr>
             ) : (
               lines.map((line) => {
-                const currentSource = lineSources[line._id];
+                const currentSource = lineSources[line._id] !== undefined ? lineSources[line._id] : line.source;
                 const isSourceUnset = !currentSource;
-                const currentAssignee = lineAssignees[line._id];
+                const currentAssignee = lineAssignees[line._id] !== undefined ? lineAssignees[line._id] : (line.assignedAssociateId?._id || line.assignedAssociateId || '');
                 const isChinaWithoutAssignee = currentSource === 'china' && !currentAssignee;
 
                 return (
@@ -854,10 +868,10 @@ export default function OrderDetailPage() {
                                 background: isChinaWithoutAssignee ? 'rgba(245, 158, 11, 0.08)' : undefined,
                               }}
                             >
-                              <option value="">— Assign China Associate (Required) —</option>
-                              {chinaAssociates.map((u) => (
+                              <option value="">— Assign Associate (Optional) —</option>
+                              {associates.map((u) => (
                                 <option key={u._id} value={u._id}>
-                                  {u.name} ({u.email})
+                                  {u.name} ({u.role === 'china_associate' ? 'China' : 'Admin'})
                                 </option>
                               ))}
                             </select>
