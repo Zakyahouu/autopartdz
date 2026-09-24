@@ -52,7 +52,9 @@ router.get('/', async (req, res) => {
       _id: o._id,
       trackingCode: o.trackingCode,
       orderType: o.orderType,
-      linkedOrderId: o.linkedOrderId,
+      isCorrection: Boolean(o.isCorrection),
+      parentOrderId: o.parentOrderId || o.linkedOrderId || null,
+      linkedOrderId: o.linkedOrderId || o.parentOrderId || null,
       status: o.status,
       firstName: o.firstName,
       lastName: o.lastName,
@@ -64,6 +66,7 @@ router.get('/', async (req, res) => {
       carCategoryName: o.carCategoryId?.name || '—',
       createdAt: o.createdAt,
       lineCount: countMap.get(o._id.toString()) || 0,
+      rejectionReason: o.rejectionReason || null,
     }));
 
     return res.json(result);
@@ -74,7 +77,7 @@ router.get('/', async (req, res) => {
 });
 
 // ── GET /api/orders/:id ───────────────────────────────────────────────────────
-// Full order detail for admin: populated lines, prices, linked order
+// Full order detail for admin: populated lines, prices, linked/parent order
 router.get('/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -84,8 +87,11 @@ router.get('/:id', async (req, res) => {
 
     const order = await Order.findById(id)
       .populate('carCategoryId', 'name')
+      .populate('parentOrderId', 'trackingCode firstName lastName status createdAt')
       .populate('linkedOrderId', 'trackingCode firstName lastName status createdAt')
       .populate('confirmedBy', 'name email role')
+      .populate('rejectedBy', 'name email role')
+      .populate('completedBy', 'name email role')
       .lean();
 
     if (!order) {
@@ -98,6 +104,10 @@ router.get('/:id', async (req, res) => {
         select: '_id shortName fullName code category defaultSource hasTranslation pricing active',
       })
       .populate('assignedAssociateId', '_id name email role active')
+      .populate({
+        path: 'parentLineId',
+        select: '_id status documentTypeId correctionReason clientPrice',
+      })
       .populate({
         path: 'uploadedFiles',
         select: '_id filename contentType size uploadedAt uploadedByUserId',
@@ -496,6 +506,101 @@ router.post('/:id/deliver', async (req, res) => {
   } catch (err) {
     console.error('[POST /api/orders/:id/deliver]', err);
     return res.status(500).json({ error: 'Server error marking order as delivered.' });
+  }
+});
+
+// ── POST /api/orders/:id/reject ──────────────────────────────────────────────
+// Admin-only. Valid ONLY on isCorrection=true orders at status === 'pending'.
+// Moves order to 'rejected', stores reason, and is terminal.
+// Does NOT touch parent order or its lines in any way.
+router.post('/:id/reject', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { reason } = req.body;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(404).json({ error: 'Order not found.' });
+    }
+
+    const order = await Order.findById(id);
+    if (!order) {
+      return res.status(404).json({ error: 'Order not found.' });
+    }
+
+    // Scoped strictly to correction orders per Phase 7 specification
+    if (!order.isCorrection) {
+      return res.status(400).json({
+        error: 'Reject route is only valid for correction orders.',
+      });
+    }
+
+    if (order.status !== 'pending') {
+      return res.status(400).json({
+        error: `Only pending correction orders can be rejected. Current status: "${order.status}".`,
+      });
+    }
+
+    if (!reason || typeof reason !== 'string' || !reason.trim()) {
+      return res.status(400).json({
+        error: 'A rejection reason is required when rejecting a correction claim.',
+      });
+    }
+
+    order.status = 'rejected';
+    order.rejectionReason = reason.trim();
+    order.rejectedBy = req.user._id;
+    order.rejectedAt = new Date();
+    await order.save();
+
+    return res.json({
+      message: 'Correction order rejected.',
+      orderId: order._id,
+      orderStatus: order.status,
+      rejectionReason: order.rejectionReason,
+      rejectedAt: order.rejectedAt,
+    });
+  } catch (err) {
+    console.error('[POST /api/orders/:id/reject]', err);
+    return res.status(500).json({ error: 'Server error rejecting correction order.' });
+  }
+});
+
+// ── POST /api/orders/:id/complete ────────────────────────────────────────────
+// Admin-only. Reachable ONLY from 'delivered'.
+// Represents payment confirmed by phone call (not client self-service).
+// Applies to both normal and correction orders identically. Terminal status.
+router.post('/:id/complete', async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(404).json({ error: 'Order not found.' });
+    }
+
+    const order = await Order.findById(id);
+    if (!order) {
+      return res.status(404).json({ error: 'Order not found.' });
+    }
+
+    if (order.status !== 'delivered') {
+      return res.status(400).json({
+        error: `Cannot complete order: required status is "delivered". Current status: "${order.status}".`,
+      });
+    }
+
+    order.status = 'completed';
+    order.completedBy = req.user._id;
+    order.completedAt = new Date();
+    await order.save();
+
+    return res.json({
+      message: 'Order marked as completed.',
+      orderId: order._id,
+      orderStatus: order.status,
+      completedAt: order.completedAt,
+    });
+  } catch (err) {
+    console.error('[POST /api/orders/:id/complete]', err);
+    return res.status(500).json({ error: 'Server error completing order.' });
   }
 });
 

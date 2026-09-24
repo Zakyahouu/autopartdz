@@ -68,6 +68,20 @@ export default function OrdersQueuePage() {
             <span>Cancelled</span>
           </span>
         );
+      case 'completed':
+        return (
+          <span className="admin-status" style={{ background: 'rgba(16, 185, 129, 0.1)', color: '#059669', borderColor: 'rgba(16, 185, 129, 0.25)' }}>
+            <CheckCircle2 size={12} strokeWidth={2.2} />
+            <span>Completed</span>
+          </span>
+        );
+      case 'rejected':
+        return (
+          <span className="admin-status is-inactive" style={{ background: 'rgba(239, 68, 68, 0.1)', color: '#dc2626', borderColor: 'rgba(239, 68, 68, 0.25)' }}>
+            <AlertCircle size={12} strokeWidth={2.2} />
+            <span>Rejected</span>
+          </span>
+        );
       default:
         return (
           <span className="admin-status">

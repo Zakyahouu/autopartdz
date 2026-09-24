@@ -150,6 +150,8 @@ const resources = {
           in_progress: 'In Progress & Processing',
           ready: 'Ready for Collection / Dispatch',
           delivered: 'Delivered to Importer',
+          completed: 'Dossier Completed',
+          rejected: 'Correction Claim Rejected',
           cancelled: 'Cancelled',
         },
         stages: {
@@ -322,6 +324,8 @@ const resources = {
           in_progress: 'En cours de traitement & expédition',
           ready: 'Documents prêts au bureau',
           delivered: 'Livré au client',
+          completed: 'Dossier Clôturé',
+          rejected: 'Demande de correction rejetée',
           cancelled: 'Annulé',
         },
         stages: {
@@ -494,6 +498,8 @@ const resources = {
           in_progress: 'قيد المعالجة والإصدار',
           ready: 'الوثائق جاهزة بالمكتب',
           delivered: 'تم التسليم للمستورد',
+          completed: 'تم إغلاق الملف واكتمال الدفع',
+          rejected: 'تم رفض طلب التصحيح',
           cancelled: 'ملغى',
         },
         stages: {

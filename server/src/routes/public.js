@@ -533,6 +533,208 @@ router.post('/orders/correction', async (req, res) => {
   }
 });
 
+// ── POST /api/public/orders/:trackingCode/correction (Phase 7 Client Route) ───
+// Client-facing correction submission:
+// Requires trackingCode + (phone OR vin) matching Case 5 tracking identity rule.
+// Only allowed when parent order status is 'delivered' or 'completed'.
+// Body: array of { originalLineId, reason } (or { phone, vin, lines: [...] })
+// Guard: reject if any originalLineId already has an open (non-terminal) correction order.
+// On success: creates new Order with isCorrection=true, parentOrderId, fresh trackingCode,
+// and cloned lines with parentLineId, correctionReason, status='needed'.
+// Parent order and its lines remain completely untouched.
+router.post('/orders/:trackingCode/correction', async (req, res) => {
+  try {
+    const { trackingCode } = req.params;
+    const phone = req.body?.phone || req.query?.phone;
+    const vin = req.body?.vin || req.query?.vin;
+
+    if (!trackingCode?.trim()) {
+      return res.status(400).json({ error: 'Tracking code is required.' });
+    }
+
+    const cleanPhone = phone?.trim();
+    const cleanVin = vin?.trim().toUpperCase();
+
+    if (!cleanPhone && !cleanVin) {
+      return res.status(400).json({
+        error: 'Verification required: provide either phone number or VIN along with tracking code.',
+      });
+    }
+
+    // Identity check — same rule as tracking route
+    const conditions = [{ trackingCode: trackingCode.trim().toUpperCase() }];
+    const matchConditions = [];
+    if (cleanPhone) matchConditions.push({ phone: cleanPhone });
+    if (cleanVin) matchConditions.push({ vin: cleanVin });
+    conditions.push({ $or: matchConditions });
+
+    const parentOrder = await Order.findOne({ $and: conditions });
+    if (!parentOrder) {
+      return res.status(404).json({
+        error: 'No matching order found. Please check your tracking code and phone number / VIN.',
+      });
+    }
+
+    // Gate: only allowed when parent order status is 'delivered' or 'completed'
+    if (!['delivered', 'completed'].includes(parentOrder.status)) {
+      return res.status(400).json({
+        error: `Corrections are only permitted on delivered or completed orders. Current status: "${parentOrder.status}".`,
+      });
+    }
+
+    // Extract items (support array directly or lines/corrections property)
+    let items = [];
+    if (Array.isArray(req.body)) {
+      items = req.body;
+    } else if (Array.isArray(req.body?.lines)) {
+      items = req.body.lines;
+    } else if (Array.isArray(req.body?.corrections)) {
+      items = req.body.corrections;
+    }
+
+    if (!items || items.length === 0) {
+      return res.status(400).json({
+        error: 'At least one document line must be selected for correction.',
+      });
+    }
+
+    // Validate body structure and non-empty reasons
+    const lineIds = [];
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      if (!item || !item.originalLineId) {
+        return res.status(400).json({ error: `Item ${i + 1}: originalLineId is required.` });
+      }
+      if (!mongoose.Types.ObjectId.isValid(item.originalLineId)) {
+        return res.status(400).json({ error: `Item ${i + 1}: Invalid originalLineId format.` });
+      }
+      if (!item.reason || typeof item.reason !== 'string' || !item.reason.trim()) {
+        return res.status(400).json({
+          error: `A non-empty correction reason is required for line ${item.originalLineId}.`,
+        });
+      }
+      lineIds.push(item.originalLineId);
+    }
+
+    // Check for duplicate line IDs in the request itself
+    const uniqueLineIds = new Set(lineIds.map((id) => id.toString()));
+    if (uniqueLineIds.size !== lineIds.length) {
+      return res.status(400).json({
+        error: 'Duplicate lines selected in correction request.',
+      });
+    }
+
+    // Verify all original lines belong to this parent order
+    const originalLines = await OrderDocumentLine.find({
+      _id: { $in: lineIds },
+      orderId: parentOrder._id,
+    }).populate('documentTypeId', 'shortName fullName');
+
+    if (originalLines.length !== lineIds.length) {
+      return res.status(400).json({
+        error: 'One or more selected lines do not belong to this order.',
+      });
+    }
+
+    const origLineMap = new Map();
+    originalLines.forEach((l) => origLineMap.set(l._id.toString(), l));
+
+    // GUARD: reject if any selected originalLineId already has an open
+    // (non-rejected, non-terminal) correction order referencing it.
+    // Terminal statuses: 'rejected', 'completed', 'cancelled'
+    const existingCorrectionLines = await OrderDocumentLine.find({
+      parentLineId: { $in: lineIds },
+    }).populate({
+      path: 'orderId',
+      select: '_id trackingCode status isCorrection',
+    }).populate('documentTypeId', 'shortName fullName');
+
+    for (const corrLine of existingCorrectionLines) {
+      const corrOrder = corrLine.orderId;
+      if (corrOrder && !['rejected', 'completed', 'cancelled'].includes(corrOrder.status)) {
+        const docName =
+          corrLine.documentTypeId?.fullName ||
+          corrLine.documentTypeId?.shortName ||
+          corrLine.parentLineId.toString();
+        return res.status(400).json({
+          error: `Line "${docName}" (ID: ${corrLine.parentLineId}) already has an open correction order (${corrOrder.trackingCode}, status: "${corrOrder.status}"). Duplicate correction claims on the same line are not allowed.`,
+          conflictingLineId: corrLine.parentLineId,
+          existingTrackingCode: corrOrder.trackingCode,
+        });
+      }
+    }
+
+    // Success: Create new correction Order
+    const newTrackingCode = await generateUniqueTrackingCode();
+
+    const newOrder = await Order.create({
+      trackingCode: newTrackingCode,
+      orderType: 'correction',
+      isCorrection: true,
+      parentOrderId: parentOrder._id,
+      linkedOrderId: parentOrder._id,
+      status: 'pending',
+      firstName: parentOrder.firstName,
+      lastName: parentOrder.lastName,
+      email: parentOrder.email || '',
+      phone: parentOrder.phone,
+      wilaya: parentOrder.wilaya,
+      address: parentOrder.address,
+      passportNumber: parentOrder.passportNumber || '',
+      vin: parentOrder.vin,
+      carModel: parentOrder.carModel || '',
+      carCategoryId: parentOrder.carCategoryId,
+      importAgency: parentOrder.importAgency || '',
+      note: parentOrder.note || '',
+      passportFileId: parentOrder.passportFileId || null,
+    });
+
+    // Create new OrderDocumentLines
+    const newLinesToInsert = items.map((item) => {
+      const orig = origLineMap.get(item.originalLineId.toString());
+      return {
+        orderId: newOrder._id,
+        documentTypeId: orig.documentTypeId._id || orig.documentTypeId,
+        parentLineId: orig._id,
+        correctionReason: item.reason.trim(),
+        translationMode: orig.translationMode,
+        clientPrice: orig.clientPrice,
+        costPrice: orig.costPrice,
+        source: orig.source,
+        status: 'needed',
+      };
+    });
+
+    const insertedLines = await OrderDocumentLine.insertMany(newLinesToInsert);
+
+    return res.status(201).json({
+      message: 'Correction order created successfully.',
+      trackingCode: newOrder.trackingCode,
+      orderId: newOrder._id,
+      isCorrection: newOrder.isCorrection,
+      parentOrderId: newOrder.parentOrderId,
+      order: {
+        _id: newOrder._id,
+        trackingCode: newOrder.trackingCode,
+        orderType: newOrder.orderType,
+        isCorrection: newOrder.isCorrection,
+        parentOrderId: newOrder.parentOrderId,
+        status: newOrder.status,
+      },
+      lines: insertedLines.map((l) => ({
+        _id: l._id,
+        parentLineId: l.parentLineId,
+        correctionReason: l.correctionReason,
+        status: l.status,
+        documentTypeId: l.documentTypeId,
+      })),
+    });
+  } catch (err) {
+    console.error('[POST /api/public/orders/:trackingCode/correction]', err);
+    return res.status(500).json({ error: 'Server error processing correction submission.' });
+  }
+});
+
 // ── Helper Status Mappers for Public Tracking ────────────────────────────────
 function mapLineStatusToClient(status) {
   switch (status) {
@@ -568,6 +770,10 @@ function mapOrderStatusToClient(status) {
     case 'sent_to_client':
     case 'delivered':
       return 'delivered';
+    case 'completed':
+      return 'completed';
+    case 'rejected':
+      return 'rejected';
     case 'cancelled':
       return 'cancelled';
     default:
@@ -641,6 +847,7 @@ router.get('/orders/track', async (req, res) => {
     return res.json({
       orderStatus: mapOrderStatusToClient(order.status),
       orderType: order.orderType,
+      isCorrection: Boolean(order.isCorrection),
       lines: sanitizedLines,
     });
   } catch (err) {

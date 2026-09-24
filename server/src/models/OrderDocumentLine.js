@@ -98,6 +98,12 @@ const orderDocumentLineSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+    // Points to the original line being corrected (for correction orders only)
+    parentLineId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'OrderDocumentLine',
+      default: null,
+    },
     // Populated only on lines that belong to a Correction order
     correctionReason: {
       type: String,

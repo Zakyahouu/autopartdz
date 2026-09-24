@@ -82,6 +82,12 @@ export default function OrderDetailPage() {
   const [attachBusy, setAttachBusy] = useState(false);
   const [attachError, setAttachError] = useState('');
 
+  // Reject correction modal
+  const [rejectModalOpen, setRejectModalOpen] = useState(false);
+  const [rejectReason, setRejectReason] = useState('');
+  const [rejectBusy, setRejectBusy] = useState(false);
+  const [rejectError, setRejectError] = useState('');
+
   const loadOrderDetail = async () => {
     setLoading(true);
     const { ok, data } = await apiFetch(`/orders/${id}`);
@@ -270,6 +276,31 @@ export default function OrderDetailPage() {
     }
   };
 
+  // ── Reject correction claim (POST /orders/:id/reject) ──────────────────────
+  const handleRejectOrder = async (e) => {
+    e.preventDefault();
+    if (!rejectReason.trim()) {
+      setRejectError('A reason is required to reject a correction claim.');
+      return;
+    }
+    setRejectBusy(true);
+    setRejectError('');
+    try {
+      const { ok, data } = await apiFetch(`/orders/${id}/reject`, {
+        method: 'POST',
+        body: JSON.stringify({ reason: rejectReason.trim() }),
+      });
+      if (!ok) throw new Error(data?.error || 'Failed to reject correction order.');
+      setRejectModalOpen(false);
+      setRejectReason('');
+      await loadOrderDetail();
+    } catch (err) {
+      setRejectError(err.message);
+    } finally {
+      setRejectBusy(false);
+    }
+  };
+
   // Attach document file submit (without status change)
   const handleAttachSubmit = async (e) => {
     e.preventDefault();
@@ -418,6 +449,25 @@ export default function OrderDetailPage() {
             </button>
           )}
 
+          {/* Correction Order Reject Action (Terminal) */}
+          {isPending && (order.isCorrection || order.orderType === 'correction') && (
+            <button
+              type="button"
+              className="btn-admin-secondary"
+              onClick={() => {
+                setRejectReason('');
+                setRejectError('');
+                setRejectModalOpen(true);
+              }}
+              disabled={actionLoading}
+              style={{ color: '#dc2626', borderColor: '#fca5a5' }}
+              title="Reject correction claim"
+            >
+              <X size={15} />
+              <span>Reject Claim</span>
+            </button>
+          )}
+
           {/* Fulfillment actions — one primary action shown at a time */}
           {order.status === 'ready_for_dispatch' && (
             <button
@@ -457,6 +507,19 @@ export default function OrderDetailPage() {
               <span>{fulfillmentBusy ? 'Saving…' : 'Mark Delivered'}</span>
             </button>
           )}
+
+          {order.status === 'delivered' && (
+            <button
+              type="button"
+              className="btn-admin-primary"
+              onClick={() => handleFulfillment('complete')}
+              disabled={fulfillmentBusy}
+              style={{ backgroundColor: '#059669', borderColor: '#059669' }}
+            >
+              <CheckCircle2 size={15} />
+              <span>{fulfillmentBusy ? 'Saving…' : 'Mark Completed (Payment Confirmed)'}</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -473,6 +536,16 @@ export default function OrderDetailPage() {
               {order.linkedOrderId.trackingCode}
             </Link>
             . Client has flagged specific documents for amendment.
+          </span>
+        </div>
+      )}
+
+      {/* Rejection Banner */}
+      {order.status === 'rejected' && (
+        <div className="admin-alert admin-alert-error" style={{ marginBottom: 16 }}>
+          <AlertTriangle size={16} style={{ flexShrink: 0 }} />
+          <span>
+            <strong>Correction Claim Rejected:</strong> {order.rejectionReason || 'No reason provided.'}
           </span>
         </div>
       )}
@@ -496,8 +569,8 @@ export default function OrderDetailPage() {
             </div>
             <div style={{ marginTop: 2 }}>
               <span className={`admin-status ${
-                order.status === 'confirmed' ? 'is-active' :
-                order.status === 'delivered' ? 'is-active' : ''
+                ['confirmed', 'delivered', 'completed'].includes(order.status) ? 'is-active' :
+                order.status === 'rejected' ? 'is-inactive' : ''
               }`} style={{
                 color:
                   order.status === 'in_progress' ? '#d97706' :
@@ -505,9 +578,12 @@ export default function OrderDetailPage() {
                   order.status === 'packaged' ? '#0891b2' :
                   order.status === 'sent_to_client' ? '#0891b2' :
                   order.status === 'delivered' ? '#16a34a' :
+                  order.status === 'completed' ? '#059669' :
+                  order.status === 'rejected' ? '#dc2626' :
                   undefined,
               }}>
-                {['confirmed','delivered'].includes(order.status) ? <CheckCircle2 size={12} /> : <Clock size={12} />}
+                {['confirmed', 'delivered', 'completed'].includes(order.status) ? <CheckCircle2 size={12} /> :
+                 order.status === 'rejected' ? <AlertTriangle size={12} /> : <Clock size={12} />}
                 <span style={{ textTransform: 'capitalize' }}>{order.status.replace(/_/g, ' ')}</span>
               </span>
             </div>
@@ -1628,6 +1704,67 @@ export default function OrderDetailPage() {
                   }}
                 >
                   {reviewBusy ? 'Saving…' : reviewDecision === 'approve' ? 'Confirm Approval' : 'Confirm Rejection'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Reject Correction Modal */}
+      {rejectModalOpen && (
+        <div className="admin-modal-overlay">
+          <div className="admin-modal" style={{ maxWidth: 480 }}>
+            <div className="admin-modal-header">
+              <h3 className="admin-modal-title">Reject Correction Claim</h3>
+              <button
+                type="button"
+                className="admin-modal-close"
+                onClick={() => setRejectModalOpen(false)}
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <form onSubmit={handleRejectOrder}>
+              <div className="admin-modal-body">
+                <p style={{ fontSize: 13, color: 'var(--admin-text-secondary)', marginBottom: 14 }}>
+                  Rejecting this claim is terminal. The order will be marked as rejected and no further production actions will be permitted.
+                </p>
+                <div className="admin-form-group">
+                  <label className="admin-form-label">
+                    Rejection Reason <span className="required">*</span>
+                  </label>
+                  <textarea
+                    className="admin-textarea"
+                    rows={4}
+                    placeholder="Explain why this correction claim is rejected…"
+                    value={rejectReason}
+                    onChange={(e) => setRejectReason(e.target.value)}
+                    required
+                  />
+                </div>
+                {rejectError && (
+                  <div className="admin-alert admin-alert-error" style={{ marginTop: 8 }}>
+                    <AlertTriangle size={14} />
+                    <span>{rejectError}</span>
+                  </div>
+                )}
+              </div>
+              <div className="admin-modal-footer">
+                <button
+                  type="button"
+                  className="btn-admin-secondary"
+                  onClick={() => setRejectModalOpen(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="btn-admin-primary"
+                  disabled={rejectBusy || !rejectReason.trim()}
+                  style={{ backgroundColor: '#dc2626', borderColor: '#dc2626' }}
+                >
+                  {rejectBusy ? 'Rejecting…' : 'Confirm Rejection'}
                 </button>
               </div>
             </form>
