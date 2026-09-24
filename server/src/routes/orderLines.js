@@ -83,6 +83,13 @@ router.post('/:lineId/attach', uploadSingle('file'), async (req, res) => {
       return res.status(404).json({ error: 'Document line not found.' });
     }
 
+    const parentOrder = await Order.findById(line.orderId);
+    if (parentOrder && ['rejected', 'completed'].includes(parentOrder.status)) {
+      return res.status(400).json({
+        error: `Cannot modify lines on an order with terminal status "${parentOrder.status}".`,
+      });
+    }
+
     // Access control
     if (req.user.role === 'china_associate') {
       const isDelegate = line.assignedAssociateId &&
@@ -176,6 +183,13 @@ router.post('/:lineId/lock', async (req, res) => {
     const line = await OrderDocumentLine.findById(lineId);
     if (!line) {
       return res.status(404).json({ error: 'Document line not found.' });
+    }
+
+    const parentOrder = await Order.findById(line.orderId);
+    if (parentOrder && ['rejected', 'completed'].includes(parentOrder.status)) {
+      return res.status(400).json({
+        error: `Cannot lock lines on an order with terminal status "${parentOrder.status}".`,
+      });
     }
 
     if (line.status !== 'attached') {

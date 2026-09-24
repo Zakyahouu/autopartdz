@@ -19,6 +19,15 @@ const orderSchema = new mongoose.Schema(
       ref: 'Order',
       default: null,
     },
+    isCorrection: {
+      type: Boolean,
+      default: false,
+    },
+    parentOrderId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Order',
+      default: null,
+    },
     status: {
       type: String,
       enum: [
@@ -29,9 +38,32 @@ const orderSchema = new mongoose.Schema(
         'packaged',
         'sent_to_client',
         'delivered',
-        'cancelled',
+        'completed',
+        'rejected',
       ],
       default: 'pending',
+    },
+    rejectionReason: {
+      type: String,
+      default: null,
+    },
+    rejectedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      default: null,
+    },
+    rejectedAt: {
+      type: Date,
+      default: null,
+    },
+    completedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      default: null,
+    },
+    completedAt: {
+      type: Date,
+      default: null,
     },
     // Client details
     firstName: {
