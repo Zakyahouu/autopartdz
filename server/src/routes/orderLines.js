@@ -84,7 +84,7 @@ router.post('/:lineId/attach', uploadSingle('file'), async (req, res) => {
     }
 
     const parentOrder = await Order.findById(line.orderId);
-    if (parentOrder && ['rejected', 'cancelled', 'completed'].includes(parentOrder.status)) {
+    if (parentOrder && ['rejected', 'completed'].includes(parentOrder.status)) {
       return res.status(400).json({
         error: `Cannot modify lines on an order with terminal status "${parentOrder.status}".`,
       });
@@ -186,7 +186,7 @@ router.post('/:lineId/lock', async (req, res) => {
     }
 
     const parentOrder = await Order.findById(line.orderId);
-    if (parentOrder && ['rejected', 'cancelled', 'completed'].includes(parentOrder.status)) {
+    if (parentOrder && ['rejected', 'completed'].includes(parentOrder.status)) {
       return res.status(400).json({
         error: `Cannot lock lines on an order with terminal status "${parentOrder.status}".`,
       });

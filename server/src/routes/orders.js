@@ -142,7 +142,7 @@ router.delete('/:id', async (req, res) => {
 
     if (order.status !== 'pending') {
       return res.status(400).json({
-        error: `Cannot delete order with status "${order.status}". Confirmed orders cannot be deleted; they must be managed via status update/cancellation.`,
+        error: `Cannot delete order with status "${order.status}". Only pending orders can be deleted.`,
       });
     }
 

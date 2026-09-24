@@ -152,7 +152,6 @@ const resources = {
           delivered: 'Delivered to Importer',
           completed: 'Dossier Completed',
           rejected: 'Correction Claim Rejected',
-          cancelled: 'Cancelled',
         },
         stages: {
           needed: 'Requested',
@@ -326,7 +325,6 @@ const resources = {
           delivered: 'Livré au client',
           completed: 'Dossier Clôturé',
           rejected: 'Demande de correction rejetée',
-          cancelled: 'Annulé',
         },
         stages: {
           needed: 'Demandé',
@@ -500,7 +498,6 @@ const resources = {
           delivered: 'تم التسليم للمستورد',
           completed: 'تم إغلاق الملف واكتمال الدفع',
           rejected: 'تم رفض طلب التصحيح',
-          cancelled: 'ملغى',
         },
         stages: {
           needed: 'مطلوبة',

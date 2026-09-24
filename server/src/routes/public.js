@@ -330,8 +330,8 @@ router.post('/orders/correction/lookup', async (req, res) => {
     if (cleanVin) matchConditions.push({ vin: cleanVin });
 
     conditions.push({ $or: matchConditions });
-    // Status gate: only orders whose status is NOT 'pending' and NOT 'cancelled' can be looked up for correction
-    conditions.push({ status: { $nin: ['pending', 'cancelled'] } });
+    // Status gate: only orders whose status is NOT 'pending' can be looked up for correction
+    conditions.push({ status: { $ne: 'pending' } });
 
     const order = await Order.findOne({ $and: conditions }).lean();
 
@@ -400,7 +400,7 @@ router.post('/orders/correction', async (req, res) => {
     }
 
     const originalOrder = await Order.findById(originalOrderId);
-    if (!originalOrder || ['pending', 'cancelled'].includes(originalOrder.status)) {
+    if (!originalOrder || originalOrder.status === 'pending') {
       return res.status(404).json({ error: 'Original order not found or is ineligible for correction.' });
     }
 
@@ -641,7 +641,7 @@ router.post('/orders/:trackingCode/correction', async (req, res) => {
 
     // GUARD: reject if any selected originalLineId already has an open
     // (non-rejected, non-terminal) correction order referencing it.
-    // Terminal statuses: 'rejected', 'completed', 'cancelled'
+    // Terminal statuses: 'rejected', 'completed'
     const existingCorrectionLines = await OrderDocumentLine.find({
       parentLineId: { $in: lineIds },
     }).populate({
@@ -651,7 +651,7 @@ router.post('/orders/:trackingCode/correction', async (req, res) => {
 
     for (const corrLine of existingCorrectionLines) {
       const corrOrder = corrLine.orderId;
-      if (corrOrder && !['rejected', 'completed', 'cancelled'].includes(corrOrder.status)) {
+      if (corrOrder && !['rejected', 'completed'].includes(corrOrder.status)) {
         const docName =
           corrLine.documentTypeId?.fullName ||
           corrLine.documentTypeId?.shortName ||
@@ -774,8 +774,6 @@ function mapOrderStatusToClient(status) {
       return 'completed';
     case 'rejected':
       return 'rejected';
-    case 'cancelled':
-      return 'cancelled';
     default:
       return 'in_progress';
   }

@@ -61,13 +61,6 @@ export default function OrdersQueuePage() {
             <span>Confirmed</span>
           </span>
         );
-      case 'cancelled':
-        return (
-          <span className="admin-status is-inactive">
-            <AlertCircle size={12} strokeWidth={2.2} />
-            <span>Cancelled</span>
-          </span>
-        );
       case 'completed':
         return (
           <span className="admin-status" style={{ background: 'rgba(16, 185, 129, 0.1)', color: '#059669', borderColor: 'rgba(16, 185, 129, 0.25)' }}>

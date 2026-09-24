@@ -24,7 +24,10 @@ const STATUS_MAP = {
   confirmed:            { label: 'Confirmed',       type: 'neutral', icon: CheckCircle2 },
   in_progress:          { label: 'In Progress',     type: 'neutral', icon: Clock },
   ready_for_dispatch:   { label: 'Ready Dispatch',  type: 'amber',   icon: Clock },
-  cancelled:            { label: 'Cancelled',       type: 'danger',  icon: AlertCircle },
+  packaged:             { label: 'Packaged',        type: 'blue',    icon: Clock },
+  sent_to_client:       { label: 'In Transit',      type: 'blue',    icon: Clock },
+  completed:            { label: 'Completed',       type: 'success', icon: CheckCircle2 },
+  rejected:             { label: 'Rejected',        type: 'danger',  icon: AlertCircle },
 };
 
 const PROVENANCE_MAP = {
