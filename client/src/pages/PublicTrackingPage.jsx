@@ -17,6 +17,7 @@ import {
   ArrowLeft,
 } from 'lucide-react';
 import PublicNavbar from '../components/public/PublicNavbar';
+import { apiFetch } from '../utils/api';
 
 export default function PublicTrackingPage() {
   const { t, i18n } = useTranslation();
@@ -89,11 +90,10 @@ export default function PublicTrackingPage() {
 
     setBusy(true);
     try {
-      const res = await fetch(`/api/public/orders/track?${params.toString()}`);
-      const data = await res.json();
+      const { ok, data } = await apiFetch(`/public/orders/track?${params.toString()}`);
 
-      if (!res.ok) {
-        setError(data.error || t('tracking.notFound'));
+      if (!ok) {
+        setError(data?.error || t('tracking.notFound'));
         setResult(null);
         return;
       }
