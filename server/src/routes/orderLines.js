@@ -298,4 +298,183 @@ router.post('/:lineId/files', uploadSingle('file'), async (req, res) => {
   }
 });
 
+// ── POST /api/order-lines/:id/claim ──────────────────────────────────────────
+// China-associate-only: Claim an open-pool line atomically.
+router.post('/:lineId/claim', requireRole('china_associate'), async (req, res) => {
+  try {
+    const { lineId } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(lineId)) {
+      return res.status(400).json({ error: 'Invalid line ID.' });
+    }
+
+    // Atomic findOneAndUpdate ensures two racing associates cannot both claim
+    const line = await OrderDocumentLine.findOneAndUpdate(
+      {
+        _id: lineId,
+        delegationMode: 'open',
+        assignedAssociateId: null,
+        excludedAssociateIds: { $ne: req.user._id },
+      },
+      {
+        $set: {
+          assignedAssociateId: req.user._id,
+        },
+        $push: {
+          activityLog: {
+            timestamp: new Date(),
+            actorId: req.user._id,
+            actorRole: req.user.role,
+            action: 'claimed',
+            note: 'Claimed by associate from open pool.',
+            fileId: null,
+          },
+        },
+      },
+      { new: true }
+    )
+      .populate('documentTypeId', 'shortName fullName code category')
+      .populate('assignedAssociateId', '_id name email role active')
+      .populate('orderId', 'trackingCode vin carModel firstName lastName passportNumber address');
+
+    if (!line) {
+      const existing = await OrderDocumentLine.findById(lineId).lean();
+      if (!existing) {
+        return res.status(404).json({ error: 'Document line not found.' });
+      }
+      if (existing.excludedAssociateIds?.some((exId) => exId.toString() === req.user._id.toString())) {
+        return res.status(409).json({ error: 'You have been excluded from this line and cannot claim it.' });
+      }
+      if (existing.assignedAssociateId) {
+        return res.status(409).json({ error: 'This document line was already claimed by another associate.' });
+      }
+      return res.status(409).json({ error: 'This line is not currently open for claim.' });
+    }
+
+    return res.json({
+      message: 'Document line successfully claimed.',
+      line,
+    });
+  } catch (err) {
+    console.error('[POST /api/order-lines/:lineId/claim]', err);
+    return res.status(500).json({ error: 'Server error claiming document line.' });
+  }
+});
+
+// ── POST /api/order-lines/:id/acknowledge ────────────────────────────────────
+// Associate (or Admin) confirms receipt of delegated/claimed line.
+router.post('/:lineId/acknowledge', async (req, res) => {
+  try {
+    const { lineId } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(lineId)) {
+      return res.status(400).json({ error: 'Invalid line ID.' });
+    }
+
+    const line = await OrderDocumentLine.findById(lineId);
+    if (!line) {
+      return res.status(404).json({ error: 'Document line not found.' });
+    }
+
+    const isAssigned =
+      line.assignedAssociateId &&
+      line.assignedAssociateId.toString() === req.user._id.toString();
+
+    if (!isAssigned && req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Only the assigned associate can acknowledge this line.' });
+    }
+
+    line.acknowledgedAt = new Date();
+    line.acknowledgedBy = req.user._id;
+    line.activityLog.push({
+      timestamp: new Date(),
+      actorId: req.user._id,
+      actorRole: req.user.role,
+      action: 'acknowledged',
+      note: 'Receipt confirmed by associate.',
+      fileId: null,
+    });
+
+    await line.save();
+
+    const populated = await OrderDocumentLine.findById(line._id)
+      .populate('documentTypeId', 'shortName fullName code category')
+      .populate('assignedAssociateId', '_id name email role active')
+      .populate('acknowledgedBy', '_id name email role');
+
+    return res.json({
+      message: 'Receipt acknowledged successfully.',
+      line: populated,
+    });
+  } catch (err) {
+    console.error('[POST /api/order-lines/:lineId/acknowledge]', err);
+    return res.status(500).json({ error: 'Server error acknowledging document line.' });
+  }
+});
+
+// ── POST /api/order-lines/:id/revoke ─────────────────────────────────────────
+// Admin-only: Revoke associate from a line, exclude them, and reopen line to pool.
+router.post('/:lineId/revoke', requireRole('admin'), async (req, res) => {
+  try {
+    const { lineId } = req.params;
+    const { reason } = req.body;
+
+    if (!mongoose.Types.ObjectId.isValid(lineId)) {
+      return res.status(400).json({ error: 'Invalid line ID.' });
+    }
+
+    if (!reason || !reason.trim()) {
+      return res.status(400).json({ error: 'A revocation reason is required.' });
+    }
+
+    const line = await OrderDocumentLine.findById(lineId);
+    if (!line) {
+      return res.status(404).json({ error: 'Document line not found.' });
+    }
+
+    if (!line.assignedAssociateId) {
+      return res.status(400).json({ error: 'Cannot revoke an unassigned document line.' });
+    }
+
+    const formerAssociateId = line.assignedAssociateId;
+    line.assignedAssociateId = null;
+    line.acknowledgedAt = null;
+    line.acknowledgedBy = null;
+    line.delegationMode = 'open'; // Reopen to pool for other associates
+    line.revokedAt = new Date();
+    line.revokedBy = req.user._id;
+    line.revocationReason = reason.trim();
+
+    if (!line.excludedAssociateIds) line.excludedAssociateIds = [];
+    if (!line.excludedAssociateIds.some((exId) => exId.toString() === formerAssociateId.toString())) {
+      line.excludedAssociateIds.push(formerAssociateId);
+    }
+
+    line.activityLog.push({
+      timestamp: new Date(),
+      actorId: req.user._id,
+      actorRole: req.user.role,
+      action: 'revoked',
+      note: `Revoked from associate: ${reason.trim()}. Reopened to pool.`,
+      fileId: null,
+    });
+
+    await line.save();
+
+    const populated = await OrderDocumentLine.findById(line._id)
+      .populate('documentTypeId', 'shortName fullName code category')
+      .populate('assignedAssociateId', '_id name email role active')
+      .populate('excludedAssociateIds', '_id name email role')
+      .populate('revokedBy', '_id name email role');
+
+    return res.json({
+      message: 'Line assignment revoked and reopened to pool.',
+      line: populated,
+    });
+  } catch (err) {
+    console.error('[POST /api/order-lines/:lineId/revoke]', err);
+    return res.status(500).json({ error: 'Server error revoking document line.' });
+  }
+});
+
 module.exports = router;

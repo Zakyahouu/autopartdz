@@ -16,6 +16,13 @@ import {
   Download,
   Package,
   RotateCcw,
+  User,
+  Car,
+  MapPin,
+  CreditCard,
+  CheckCircle2,
+  Bell,
+  Sparkles,
 } from 'lucide-react';
 
 export default function ChinaPortalPage() {
@@ -25,8 +32,13 @@ export default function ChinaPortalPage() {
   const [lines, setLines] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all');
+  const [successToast, setSuccessToast] = useState('');
+  const [statusFilter, setStatusFilter] = useState('my_tasks');
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Claim & Acknowledge Busy IDs
+  const [claimBusyId, setClaimBusyId] = useState(null);
+  const [ackBusyId, setAckBusyId] = useState(null);
 
   // Attach Modal State
   const [attachModalLine, setAttachModalLine] = useState(null);
@@ -47,7 +59,7 @@ export default function ChinaPortalPage() {
       setLoading(true);
       setError('');
       const authToken = token || localStorage.getItem('autopartdz_token');
-      const res = await fetch('/api/china/lines', {
+      const res = await fetch('/api/china/lines?view=all', {
         headers: {
           Authorization: `Bearer ${authToken}`,
         },
@@ -98,6 +110,64 @@ export default function ChinaPortalPage() {
     navigator.clipboard.writeText(text);
     setCopiedKey(key);
     setTimeout(() => setCopiedKey(''), 2000);
+  };
+
+  // Claim Task from Open Pool
+  const handleClaim = async (line) => {
+    try {
+      setClaimBusyId(line.id);
+      setError('');
+      const authToken = token || localStorage.getItem('autopartdz_token');
+      const res = await fetch(`/api/order-lines/${line.id}/claim`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${authToken}`,
+          'Content-Type': 'application/json',
+        },
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        if (res.status === 409) {
+          throw new Error('This task was already claimed by another associate or is no longer available.');
+        }
+        throw new Error(data.error || 'Failed to claim task.');
+      }
+      setSuccessToast(`Task claimed successfully! Please acknowledge receipt.`);
+      setTimeout(() => setSuccessToast(''), 5000);
+      await fetchLines();
+      setStatusFilter('my_tasks');
+    } catch (err) {
+      setError(err.message || 'Error claiming task');
+    } finally {
+      setClaimBusyId(null);
+    }
+  };
+
+  // Acknowledge Receipt of Task
+  const handleAcknowledge = async (line) => {
+    try {
+      setAckBusyId(line.id);
+      setError('');
+      const authToken = token || localStorage.getItem('autopartdz_token');
+      const res = await fetch(`/api/order-lines/${line.id}/acknowledge`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${authToken}`,
+          'Content-Type': 'application/json',
+        },
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to acknowledge receipt.');
+      }
+      setSuccessToast(`Receipt confirmed for "${line.documentType?.fullName || 'Document'}".`);
+      setTimeout(() => setSuccessToast(''), 4000);
+      await fetchLines();
+    } catch (err) {
+      setError(err.message || 'Error acknowledging receipt');
+    } finally {
+      setAckBusyId(null);
+    }
   };
 
   const openAttachModal = (line) => {
@@ -158,6 +228,8 @@ export default function ChinaPortalPage() {
       if (!res.ok) throw new Error(data.error || 'Failed to attach document');
 
       closeAttachModal();
+      setSuccessToast('Document attached and submitted for review!');
+      setTimeout(() => setSuccessToast(''), 4000);
       await fetchLines();
     } catch (err) {
       setAttachError(err.message);
@@ -188,28 +260,36 @@ export default function ChinaPortalPage() {
     }
   };
 
+  // Filter Counts
+  const countMine = lines.filter((l) => l.isMine || (!l.isClaimable && l.assignedAssociate)).length;
+  const countOpen = lines.filter((l) => l.isClaimable).length;
+  const countNeeded = lines.filter((l) => (l.isMine || (!l.isClaimable && l.assignedAssociate)) && l.status === 'needed').length;
+  const countAttached = lines.filter((l) => (l.isMine || (!l.isClaimable && l.assignedAssociate)) && l.status === 'attached').length;
+  const countTotal = lines.length;
+
   // Filtered Lines
   const filteredLines = lines.filter((line) => {
-    if (statusFilter === 'needed' && line.status !== 'needed') return false;
-    if (statusFilter === 'attached' && line.status !== 'attached') return false;
+    const isAssignedToMe = line.isMine || (!line.isClaimable && line.assignedAssociate);
+
+    if (statusFilter === 'my_tasks' && !isAssignedToMe) return false;
+    if (statusFilter === 'open' && !line.isClaimable) return false;
+    if (statusFilter === 'needed' && (!isAssignedToMe || line.status !== 'needed')) return false;
+    if (statusFilter === 'attached' && (!isAssignedToMe || line.status !== 'attached')) return false;
 
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase().trim();
       const vinMatch = line.order?.vin?.toLowerCase().includes(q);
       const orderTrackMatch = line.order?.trackingCode?.toLowerCase().includes(q);
       const modelMatch = line.order?.carModel?.toLowerCase().includes(q);
+      const clientMatch = `${line.order?.firstName || ''} ${line.order?.lastName || ''}`.toLowerCase().includes(q);
+      const passMatch = line.order?.passportNumber?.toLowerCase().includes(q);
       const docMatch = line.documentType?.fullName?.toLowerCase().includes(q);
       const codeMatch = line.documentType?.code?.toLowerCase().includes(q);
       const trackMatch = line.trackingCode?.toLowerCase().includes(q);
-      return vinMatch || orderTrackMatch || modelMatch || docMatch || codeMatch || trackMatch;
+      return vinMatch || orderTrackMatch || modelMatch || clientMatch || passMatch || docMatch || codeMatch || trackMatch;
     }
     return true;
   });
-
-  // Counters
-  const countTotal = lines.length;
-  const countNeeded = lines.filter((l) => l.status === 'needed').length;
-  const countAttached = lines.filter((l) => l.status === 'attached').length;
 
   return (
     <div
@@ -221,7 +301,7 @@ export default function ChinaPortalPage() {
         fontFamily: "'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
       }}
     >
-      {/* ── Sticky Top Bar: Associate Name + Logout (Min 48px tap targets) ──── */}
+      {/* ── Sticky Top Bar: Associate Name + Logout ──── */}
       <header
         style={{
           position: 'sticky',
@@ -256,10 +336,10 @@ export default function ChinaPortalPage() {
           </div>
           <div>
             <div style={{ fontSize: 14, fontWeight: 700, color: '#0f172a', lineHeight: 1.2 }}>
-              China Ops
+              China Ops Station
             </div>
             <div style={{ fontSize: 11, color: '#64748b', lineHeight: 1.2 }}>
-              {user?.name || 'Associate'} {user?.role === 'admin' && '(Admin)'}
+              {user?.name || 'Associate'} {user?.role === 'admin' && '(Admin View)'}
             </div>
           </div>
         </div>
@@ -290,22 +370,22 @@ export default function ChinaPortalPage() {
       </header>
 
       {/* ── Main Content Container ─────────────────────────────────────────── */}
-      <main style={{ maxWidth: 640, margin: '0 auto', padding: '16px 16px 48px 16px' }}>
+      <main style={{ maxWidth: 700, margin: '0 auto', padding: '16px 16px 48px 16px' }}>
         {/* Title & Refresh */}
         <div
           style={{
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
-            marginBottom: 12,
+            marginBottom: 14,
           }}
         >
           <div>
             <h1 style={{ fontSize: 20, fontWeight: 700, color: '#0f172a', margin: 0 }}>
-              Document Tasks
+              Order Documents Portal
             </h1>
             <p style={{ fontSize: 13, color: '#64748b', margin: '2px 0 0 0' }}>
-              Upload and verify documents delegated to your station
+              Claim open orders, confirm receipt, and upload verified documents
             </p>
           </div>
           <button
@@ -330,7 +410,7 @@ export default function ChinaPortalPage() {
           </button>
         </div>
 
-        {/* ── Horizontal Scrollable Filter Tabs (Min 48px tap height) ──────── */}
+        {/* ── Horizontal Scrollable Filter Tabs ──────── */}
         <div
           style={{
             display: 'flex',
@@ -345,15 +425,15 @@ export default function ChinaPortalPage() {
         >
           <button
             type="button"
-            onClick={() => setStatusFilter('all')}
+            onClick={() => setStatusFilter('my_tasks')}
             style={{
-              minHeight: 48,
-              padding: '0 18px',
+              minHeight: 44,
+              padding: '0 16px',
               borderRadius: 24,
               border: '1px solid',
-              borderColor: statusFilter === 'all' ? '#a8231b' : '#e2e8f0',
-              backgroundColor: statusFilter === 'all' ? '#a8231b' : '#ffffff',
-              color: statusFilter === 'all' ? '#ffffff' : '#475569',
+              borderColor: statusFilter === 'my_tasks' ? '#a8231b' : '#e2e8f0',
+              backgroundColor: statusFilter === 'my_tasks' ? '#a8231b' : '#ffffff',
+              color: statusFilter === 'my_tasks' ? '#ffffff' : '#475569',
               fontSize: 13,
               fontWeight: 600,
               cursor: 'pointer',
@@ -364,17 +444,55 @@ export default function ChinaPortalPage() {
               gap: 6,
             }}
           >
-            <span>All</span>
+            <span>My Tasks</span>
             <span
               style={{
                 fontSize: 11,
-                padding: '2px 6px',
+                padding: '2px 7px',
                 borderRadius: 10,
-                backgroundColor: statusFilter === 'all' ? 'rgba(255,255,255,0.25)' : '#f1f5f9',
-                color: statusFilter === 'all' ? '#ffffff' : '#475569',
+                backgroundColor: statusFilter === 'my_tasks' ? 'rgba(255,255,255,0.25)' : '#f1f5f9',
+                color: statusFilter === 'my_tasks' ? '#ffffff' : '#475569',
+                fontWeight: 700,
               }}
             >
-              {countTotal}
+              {countMine}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setStatusFilter('open')}
+            style={{
+              minHeight: 44,
+              padding: '0 16px',
+              borderRadius: 24,
+              border: '1px solid',
+              borderColor: statusFilter === 'open' ? '#059669' : countOpen > 0 ? '#6ee7b7' : '#e2e8f0',
+              backgroundColor: statusFilter === 'open' ? '#059669' : countOpen > 0 ? '#ecfdf5' : '#ffffff',
+              color: statusFilter === 'open' ? '#ffffff' : countOpen > 0 ? '#065f46' : '#475569',
+              fontSize: 13,
+              fontWeight: 600,
+              cursor: 'pointer',
+              whiteSpace: 'nowrap',
+              flexShrink: 0,
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+            }}
+          >
+            <Sparkles size={14} />
+            <span>Open — Available to Claim</span>
+            <span
+              style={{
+                fontSize: 11,
+                padding: '2px 7px',
+                borderRadius: 10,
+                backgroundColor: statusFilter === 'open' ? 'rgba(255,255,255,0.25)' : '#d1fae5',
+                color: statusFilter === 'open' ? '#ffffff' : '#047857',
+                fontWeight: 700,
+              }}
+            >
+              {countOpen}
             </span>
           </button>
 
@@ -382,8 +500,8 @@ export default function ChinaPortalPage() {
             type="button"
             onClick={() => setStatusFilter('needed')}
             style={{
-              minHeight: 48,
-              padding: '0 18px',
+              minHeight: 44,
+              padding: '0 16px',
               borderRadius: 24,
               border: '1px solid',
               borderColor: statusFilter === 'needed' ? '#b45309' : '#e2e8f0',
@@ -403,10 +521,11 @@ export default function ChinaPortalPage() {
             <span
               style={{
                 fontSize: 11,
-                padding: '2px 6px',
+                padding: '2px 7px',
                 borderRadius: 10,
                 backgroundColor: statusFilter === 'needed' ? '#fde68a' : '#f1f5f9',
                 color: statusFilter === 'needed' ? '#92400e' : '#475569',
+                fontWeight: 700,
               }}
             >
               {countNeeded}
@@ -417,8 +536,8 @@ export default function ChinaPortalPage() {
             type="button"
             onClick={() => setStatusFilter('attached')}
             style={{
-              minHeight: 48,
-              padding: '0 18px',
+              minHeight: 44,
+              padding: '0 16px',
               borderRadius: 24,
               border: '1px solid',
               borderColor: statusFilter === 'attached' ? '#1d4ed8' : '#e2e8f0',
@@ -438,19 +557,56 @@ export default function ChinaPortalPage() {
             <span
               style={{
                 fontSize: 11,
-                padding: '2px 6px',
+                padding: '2px 7px',
                 borderRadius: 10,
                 backgroundColor: statusFilter === 'attached' ? '#bfdbfe' : '#f1f5f9',
                 color: statusFilter === 'attached' ? '#1e40af' : '#475569',
+                fontWeight: 700,
               }}
             >
               {countAttached}
             </span>
           </button>
+
+          <button
+            type="button"
+            onClick={() => setStatusFilter('all')}
+            style={{
+              minHeight: 44,
+              padding: '0 16px',
+              borderRadius: 24,
+              border: '1px solid',
+              borderColor: statusFilter === 'all' ? '#334155' : '#e2e8f0',
+              backgroundColor: statusFilter === 'all' ? '#334155' : '#ffffff',
+              color: statusFilter === 'all' ? '#ffffff' : '#475569',
+              fontSize: 13,
+              fontWeight: 600,
+              cursor: 'pointer',
+              whiteSpace: 'nowrap',
+              flexShrink: 0,
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+            }}
+          >
+            <span>All Tasks</span>
+            <span
+              style={{
+                fontSize: 11,
+                padding: '2px 7px',
+                borderRadius: 10,
+                backgroundColor: statusFilter === 'all' ? 'rgba(255,255,255,0.25)' : '#f1f5f9',
+                color: statusFilter === 'all' ? '#ffffff' : '#475569',
+                fontWeight: 700,
+              }}
+            >
+              {countTotal}
+            </span>
+          </button>
         </div>
 
-        {/* ── Search Bar (Min 48px height) ──────────────────────────────────── */}
-        <div style={{ position: 'relative', marginBottom: 16 }}>
+        {/* ── Search Bar ──────────────────────────────────── */}
+        <div style={{ position: 'relative', marginBottom: 14 }}>
           <Search
             size={18}
             style={{
@@ -464,12 +620,12 @@ export default function ChinaPortalPage() {
           />
           <input
             type="text"
-            placeholder="Search order code, VIN, document..."
+            placeholder="Search by client name, passport, VIN, order code, doc..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             style={{
               width: '100%',
-              minHeight: 48,
+              minHeight: 46,
               padding: '0 14px 0 42px',
               borderRadius: 8,
               border: '1px solid #cbd5e1',
@@ -482,6 +638,28 @@ export default function ChinaPortalPage() {
           />
         </div>
 
+        {/* ── Toast Success Message ─────────────────────────────────────────── */}
+        {successToast && (
+          <div
+            style={{
+              padding: '12px 16px',
+              borderRadius: 8,
+              backgroundColor: '#ecfdf5',
+              border: '1px solid #a7f3d0',
+              color: '#065f46',
+              fontSize: 13,
+              marginBottom: 14,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              fontWeight: 500,
+            }}
+          >
+            <CheckCircle2 size={18} color="#059669" />
+            <span>{successToast}</span>
+          </div>
+        )}
+
         {/* ── Error Banner ──────────────────────────────────────────────────── */}
         {error && (
           <div
@@ -492,7 +670,7 @@ export default function ChinaPortalPage() {
               border: '1px solid #fecaca',
               color: '#991b1b',
               fontSize: 13,
-              marginBottom: 16,
+              marginBottom: 14,
               display: 'flex',
               alignItems: 'center',
               gap: 8,
@@ -516,7 +694,7 @@ export default function ChinaPortalPage() {
             }}
           >
             <RefreshCw size={24} className="spin-animate" style={{ margin: '0 auto 12px' }} />
-            <div style={{ fontSize: 14, fontWeight: 500 }}>Loading assigned queue...</div>
+            <div style={{ fontSize: 14, fontWeight: 500 }}>Loading tasks queue...</div>
           </div>
         )}
 
@@ -534,20 +712,48 @@ export default function ChinaPortalPage() {
             <Package size={36} color="#94a3b8" style={{ margin: '0 auto 12px' }} />
             <div style={{ fontSize: 16, fontWeight: 600, color: '#0f172a' }}>No tasks found</div>
             <div style={{ fontSize: 13, color: '#64748b', marginTop: 4 }}>
-              {statusFilter === 'all'
-                ? 'You have no document lines in your queue at this moment.'
-                : `No tasks found matching status filter "${statusFilter}".`}
+              {statusFilter === 'open'
+                ? 'No open tasks available to claim at this moment.'
+                : statusFilter === 'my_tasks'
+                ? 'You have no assigned tasks in your personal worklist.'
+                : `No tasks found matching filter "${statusFilter}".`}
             </div>
+            {statusFilter !== 'open' && countOpen > 0 && (
+              <button
+                type="button"
+                onClick={() => setStatusFilter('open')}
+                style={{
+                  marginTop: 14,
+                  padding: '8px 16px',
+                  borderRadius: 6,
+                  border: 'none',
+                  backgroundColor: '#059669',
+                  color: '#ffffff',
+                  fontSize: 13,
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6,
+                }}
+              >
+                <Sparkles size={14} />
+                <span>View {countOpen} Open Task(s) in Claim Pool</span>
+              </button>
+            )}
           </div>
         )}
 
-        {/* ── Mobile-First Stacked Card List (One card per document line) ─── */}
+        {/* ── Mobile-First Stacked Card List ─── */}
         {!loading && filteredLines.length > 0 && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
             {filteredLines.map((line) => {
               const isNeeded = line.status === 'needed';
               const isAttached = line.status === 'attached';
               const hasRejection = Boolean(line.lastRejectionNote);
+              const isClaimable = line.isClaimable;
+              const isAssignedToMe = line.isMine || (!line.isClaimable && line.assignedAssociate);
+              const needsAcknowledgment = isAssignedToMe && !line.isAcknowledged;
 
               return (
                 <div
@@ -555,16 +761,30 @@ export default function ChinaPortalPage() {
                   style={{
                     backgroundColor: '#ffffff',
                     border: '1px solid',
-                    borderColor: hasRejection ? '#fca5a5' : '#e2e8f0',
+                    borderColor: hasRejection
+                      ? '#fca5a5'
+                      : isClaimable
+                      ? '#a7f3d0'
+                      : needsAcknowledgment
+                      ? '#fde68a'
+                      : '#e2e8f0',
+                    borderLeftWidth: 4,
+                    borderLeftColor: isClaimable
+                      ? '#059669'
+                      : hasRejection
+                      ? '#dc2626'
+                      : needsAcknowledgment
+                      ? '#f59e0b'
+                      : '#2563eb',
                     borderRadius: 8,
                     padding: 16,
                     display: 'flex',
                     flexDirection: 'column',
                     gap: 12,
-                    boxShadow: '0 1px 2px rgba(0, 0, 0, 0.04)',
+                    boxShadow: '0 1px 3px rgba(0, 0, 0, 0.05)',
                   }}
                 >
-                  {/* Card Header: Doc Name + Status Badge */}
+                  {/* Card Header: Doc Name + Status / Claim Badges */}
                   <div
                     style={{
                       display: 'flex',
@@ -574,7 +794,7 @@ export default function ChinaPortalPage() {
                     }}
                   >
                     <div>
-                      <div style={{ fontSize: 15, fontWeight: 700, color: '#0f172a', lineHeight: 1.3 }}>
+                      <div style={{ fontSize: 16, fontWeight: 700, color: '#0f172a', lineHeight: 1.3 }}>
                         {line.documentType?.fullName || 'Customs Document'}
                       </div>
                       <div
@@ -585,13 +805,32 @@ export default function ChinaPortalPage() {
                           marginTop: 2,
                         }}
                       >
-                        {line.documentType?.code || line.id}
+                        {line.documentType?.code ? `Code: ${line.documentType.code}` : `ID: ${line.id}`}
+                        {line.documentType?.category && ` • ${line.documentType.category}`}
                       </div>
                     </div>
 
-                    {/* Status Badge */}
-                    <div style={{ flexShrink: 0 }}>
-                      {isNeeded ? (
+                    {/* Status & Claim Badges */}
+                    <div style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
+                      {isClaimable ? (
+                        <span
+                          style={{
+                            fontSize: 12,
+                            fontWeight: 700,
+                            padding: '4px 10px',
+                            borderRadius: 14,
+                            backgroundColor: '#ecfdf5',
+                            color: '#065f46',
+                            border: '1px solid #a7f3d0',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 4,
+                          }}
+                        >
+                          <Sparkles size={12} />
+                          <span>Open Pool</span>
+                        </span>
+                      ) : isNeeded ? (
                         <span
                           style={{
                             fontSize: 12,
@@ -625,7 +864,7 @@ export default function ChinaPortalPage() {
                           }}
                         >
                           <Clock size={12} />
-                          <span>Sent — In Review</span>
+                          <span>Awaiting Review</span>
                         </span>
                       ) : (
                         <span
@@ -640,6 +879,13 @@ export default function ChinaPortalPage() {
                           }}
                         >
                           {line.status}
+                        </span>
+                      )}
+
+                      {/* Receipt Status Badge */}
+                      {!isClaimable && line.isAcknowledged && (
+                        <span style={{ fontSize: 11, color: '#16a34a', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                          <Check size={11} /> Receipt Confirmed
                         </span>
                       )}
                     </div>
@@ -666,27 +912,43 @@ export default function ChinaPortalPage() {
                     </div>
                   )}
 
-                  {/* ── Order & Vehicle Info Grid ───────────────────────────── */}
+                  {/* ── CLIENT & VEHICLE DOSSIER CARD ───────────────────────────── */}
                   <div
                     style={{
-                      display: 'grid',
-                      gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))',
+                      display: 'flex',
+                      flexDirection: 'column',
                       gap: 8,
-                      padding: '10px 12px',
-                      borderRadius: 6,
+                      padding: '12px 14px',
+                      borderRadius: 8,
                       backgroundColor: '#f8fafc',
-                      border: '1px solid #f1f5f9',
-                      fontSize: 12,
+                      border: '1px solid #e2e8f0',
                     }}
                   >
-                    {/* Order Code */}
-                    <div>
-                      <div style={{ color: '#64748b', fontSize: 11 }}>Order Code</div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 1 }}>
-                        <span style={{ fontWeight: 600, color: '#0f172a', fontFamily: 'monospace' }}>
-                          {line.order?.trackingCode || '—'}
+                    {/* Client Header: Name + Order Code */}
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        borderBottom: '1px solid #edf2f7',
+                        paddingBottom: 6,
+                        flexWrap: 'wrap',
+                        gap: 6,
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 700, color: '#0f172a' }}>
+                        <User size={15} color="#a8231b" />
+                        <span>
+                          {line.order?.firstName || line.order?.lastName
+                            ? `${line.order.firstName || ''} ${line.order.lastName || ''}`.trim()
+                            : 'Client Details'}
                         </span>
-                        {line.order?.trackingCode && (
+                      </div>
+
+                      {line.order?.trackingCode && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, fontFamily: 'monospace' }}>
+                          <span style={{ color: '#64748b' }}>Order:</span>
+                          <span style={{ fontWeight: 700, color: '#0f172a' }}>{line.order.trackingCode}</span>
                           <button
                             type="button"
                             onClick={() => handleCopy(line.order.trackingCode, `order-${line.id}`)}
@@ -694,65 +956,169 @@ export default function ChinaPortalPage() {
                             style={{
                               border: 'none',
                               background: 'transparent',
-                              color: copiedKey === `order-${line.id}` ? '#15803d' : '#64748b',
                               cursor: 'pointer',
                               padding: 2,
+                              color: copiedKey === `order-${line.id}` ? '#15803d' : '#64748b',
                               display: 'inline-flex',
                             }}
                           >
                             {copiedKey === `order-${line.id}` ? <Check size={12} /> : <Copy size={12} />}
                           </button>
-                        )}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Client Details: Passport & Address */}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '6px 12px', fontSize: 12 }}>
+                      <div>
+                        <div style={{ color: '#64748b', fontSize: 11, display: 'flex', alignItems: 'center', gap: 4 }}>
+                          <CreditCard size={11} />
+                          <span>Passport No.</span>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 1 }}>
+                          <span style={{ fontWeight: 600, color: '#0f172a', fontFamily: 'monospace' }}>
+                            {line.order?.passportNumber || '—'}
+                          </span>
+                          {line.order?.passportNumber && (
+                            <button
+                              type="button"
+                              onClick={() => handleCopy(line.order.passportNumber, `pass-${line.id}`)}
+                              title="Copy Passport Number"
+                              style={{
+                                border: 'none',
+                                background: 'transparent',
+                                cursor: 'pointer',
+                                padding: 2,
+                                color: copiedKey === `pass-${line.id}` ? '#15803d' : '#64748b',
+                                display: 'inline-flex',
+                              }}
+                            >
+                              {copiedKey === `pass-${line.id}` ? <Check size={11} /> : <Copy size={11} />}
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      <div>
+                        <div style={{ color: '#64748b', fontSize: 11, display: 'flex', alignItems: 'center', gap: 4 }}>
+                          <MapPin size={11} />
+                          <span>Full Delivery Address</span>
+                        </div>
+                        <div style={{ fontWeight: 500, color: '#0f172a', marginTop: 1, wordBreak: 'break-word' }}>
+                          {line.order?.address || '—'}
+                        </div>
                       </div>
                     </div>
 
-                    {/* VIN */}
-                    <div>
-                      <div style={{ color: '#64748b', fontSize: 11 }}>Vehicle VIN</div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 1 }}>
-                        <span style={{ fontWeight: 600, color: '#0f172a', fontFamily: 'monospace' }}>
-                          {line.order?.vin || 'N/A'}
-                        </span>
-                        {line.order?.vin && (
-                          <button
-                            type="button"
-                            onClick={() => handleCopy(line.order.vin, `vin-${line.id}`)}
-                            title="Copy VIN"
-                            style={{
-                              border: 'none',
-                              background: 'transparent',
-                              color: copiedKey === `vin-${line.id}` ? '#15803d' : '#64748b',
-                              cursor: 'pointer',
-                              padding: 2,
-                              display: 'inline-flex',
-                            }}
-                          >
-                            {copiedKey === `vin-${line.id}` ? <Check size={12} /> : <Copy size={12} />}
-                          </button>
-                        )}
+                    {/* Vehicle Info Bar */}
+                    <div
+                      style={{
+                        display: 'grid',
+                        gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))',
+                        gap: '6px 12px',
+                        fontSize: 12,
+                        borderTop: '1px dashed #e2e8f0',
+                        paddingTop: 6,
+                      }}
+                    >
+                      <div>
+                        <div style={{ color: '#64748b', fontSize: 11, display: 'flex', alignItems: 'center', gap: 4 }}>
+                          <Car size={11} />
+                          <span>Vehicle VIN</span>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 1 }}>
+                          <span style={{ fontWeight: 700, color: '#a8231b', fontFamily: 'monospace' }}>
+                            {line.order?.vin || 'N/A'}
+                          </span>
+                          {line.order?.vin && (
+                            <button
+                              type="button"
+                              onClick={() => handleCopy(line.order.vin, `vin-${line.id}`)}
+                              title="Copy VIN"
+                              style={{
+                                border: 'none',
+                                background: 'transparent',
+                                cursor: 'pointer',
+                                padding: 2,
+                                color: copiedKey === `vin-${line.id}` ? '#15803d' : '#64748b',
+                                display: 'inline-flex',
+                              }}
+                            >
+                              {copiedKey === `vin-${line.id}` ? <Check size={11} /> : <Copy size={11} />}
+                            </button>
+                          )}
+                        </div>
                       </div>
-                    </div>
 
-                    {/* Car Model */}
-                    <div>
-                      <div style={{ color: '#64748b', fontSize: 11 }}>Model</div>
-                      <div style={{ fontWeight: 500, color: '#0f172a', marginTop: 1 }}>
-                        {line.order?.carModel || '—'}
+                      <div>
+                        <div style={{ color: '#64748b', fontSize: 11 }}>Make / Model</div>
+                        <div style={{ fontWeight: 600, color: '#0f172a', marginTop: 1 }}>
+                          {line.order?.carModel || '—'}
+                        </div>
                       </div>
-                    </div>
 
-                    {/* Translation Mode */}
-                    <div>
-                      <div style={{ color: '#64748b', fontSize: 11 }}>Translation</div>
-                      <div style={{ fontWeight: 500, color: '#0f172a', marginTop: 1 }}>
-                        {line.translationMode === 'original_plus_translation'
-                          ? 'Orig + Translation'
-                          : line.translationMode === 'translation_only'
-                          ? 'Translation Only'
-                          : 'Original Only'}
+                      <div>
+                        <div style={{ color: '#64748b', fontSize: 11 }}>Translation Requirement</div>
+                        <div style={{ fontWeight: 500, color: '#0f172a', marginTop: 1 }}>
+                          {line.translationMode === 'original_plus_translation'
+                            ? 'Orig + Translation'
+                            : line.translationMode === 'translation_only'
+                            ? 'Translation Only'
+                            : 'Original Only'}
+                        </div>
                       </div>
                     </div>
                   </div>
+
+                  {/* ── Prominent Acknowledgment Prompt (if assigned to me & not yet acknowledged) ─── */}
+                  {needsAcknowledgment && (
+                    <div
+                      style={{
+                        padding: '10px 14px',
+                        borderRadius: 6,
+                        backgroundColor: '#fffbeb',
+                        border: '1px solid #fde68a',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: 10,
+                        flexWrap: 'wrap',
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: '#92400e', flex: 1, minWidth: 200 }}>
+                        <Bell size={16} color="#b45309" style={{ flexShrink: 0 }} />
+                        <span>
+                          <strong>Confirm Receipt:</strong> Let Admin know you have received this task and are actively working on it.
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleAcknowledge(line)}
+                        disabled={ackBusyId === line.id}
+                        style={{
+                          minHeight: 38,
+                          padding: '0 16px',
+                          borderRadius: 6,
+                          border: 'none',
+                          backgroundColor: '#b45309',
+                          color: '#ffffff',
+                          fontSize: 12.5,
+                          fontWeight: 700,
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 6,
+                          cursor: ackBusyId === line.id ? 'not-allowed' : 'pointer',
+                        }}
+                      >
+                        {ackBusyId === line.id ? (
+                          <RefreshCw size={13} className="spin-animate" />
+                        ) : (
+                          <Check size={14} />
+                        )}
+                        <span>Acknowledge Receipt</span>
+                      </button>
+                    </div>
+                  )}
 
                   {/* ── Attached File Preview / Details (if attached) ───────── */}
                   {line.uploadedFiles && line.uploadedFiles.length > 0 && (
@@ -779,7 +1145,7 @@ export default function ChinaPortalPage() {
                               whiteSpace: 'nowrap',
                               overflow: 'hidden',
                               textOverflow: 'ellipsis',
-                              maxWidth: 220,
+                              maxWidth: 240,
                             }}
                           >
                             {line.uploadedFiles[0]?.filename || 'Uploaded Document'}
@@ -788,7 +1154,7 @@ export default function ChinaPortalPage() {
                             {line.uploadedFiles[0]?.size
                               ? `${Math.round(line.uploadedFiles[0].size / 1024)} KB`
                               : ''}
-                            {line.trackingCode ? ` • Tracking: ${line.trackingCode}` : ''}
+                            {line.trackingCode ? ` • Waybill: ${line.trackingCode}` : ''}
                           </div>
                         </div>
                       </div>
@@ -799,8 +1165,8 @@ export default function ChinaPortalPage() {
                           handleDownloadFile(line.uploadedFiles[0].id, line.uploadedFiles[0].filename)
                         }
                         style={{
-                          minHeight: 48,
-                          minWidth: 48,
+                          minHeight: 44,
+                          minWidth: 44,
                           padding: '0 8px',
                           display: 'inline-flex',
                           alignItems: 'center',
@@ -810,16 +1176,51 @@ export default function ChinaPortalPage() {
                           color: '#a8231b',
                           cursor: 'pointer',
                         }}
-                        title="Download or view file"
+                        title="Download file"
                       >
                         <Download size={18} />
                       </button>
                     </div>
                   )}
 
-                  {/* ── Primary Action Button (Min 48px tap target) ─────────── */}
+                  {/* ── Primary Action Area (Claim Task OR Attach Document) ─────────── */}
                   <div>
-                    {isNeeded ? (
+                    {isClaimable ? (
+                      /* Claim button for open pool lines */
+                      <button
+                        type="button"
+                        onClick={() => handleClaim(line)}
+                        disabled={claimBusyId === line.id}
+                        style={{
+                          width: '100%',
+                          minHeight: 48,
+                          borderRadius: 6,
+                          border: 'none',
+                          backgroundColor: '#059669',
+                          color: '#ffffff',
+                          fontSize: 14,
+                          fontWeight: 700,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: 8,
+                          cursor: claimBusyId === line.id ? 'not-allowed' : 'pointer',
+                          boxShadow: '0 2px 4px rgba(5, 150, 105, 0.25)',
+                        }}
+                      >
+                        {claimBusyId === line.id ? (
+                          <>
+                            <RefreshCw size={16} className="spin-animate" />
+                            <span>Claiming Task...</span>
+                          </>
+                        ) : (
+                          <>
+                            <CheckCircle2 size={18} />
+                            <span>Claim This Task</span>
+                          </>
+                        )}
+                      </button>
+                    ) : isNeeded ? (
                       <button
                         type="button"
                         onClick={() => openAttachModal(line)}
@@ -847,7 +1248,7 @@ export default function ChinaPortalPage() {
                       <div
                         style={{
                           width: '100%',
-                          minHeight: 48,
+                          minHeight: 44,
                           borderRadius: 6,
                           border: '1px solid #e2e8f0',
                           backgroundColor: '#f8fafc',
@@ -861,7 +1262,7 @@ export default function ChinaPortalPage() {
                         }}
                       >
                         <Clock size={16} color="#1d4ed8" />
-                        <span>Sent — Awaiting Admin Review</span>
+                        <span>Attached — Awaiting Admin Review</span>
                       </div>
                     ) : null}
                   </div>
@@ -1004,7 +1405,7 @@ export default function ChinaPortalPage() {
                       Take Photo or Select File
                     </div>
                     <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>
-                      Opens phone camera or gallery (Max 12MB)
+                      Opens camera or photo gallery (Max 12MB)
                     </div>
                   </div>
                 </div>

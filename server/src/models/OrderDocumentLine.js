@@ -63,10 +63,47 @@ const orderDocumentLineSchema = new mongoose.Schema(
       enum: ['local', 'china', null],
       default: null,
     },
+    // Delegation model: none (admin handles), specific (named associate), open (claim pool)
+    delegationMode: {
+      type: String,
+      enum: ['none', 'specific', 'open'],
+      default: 'none',
+    },
     // Optional delegate — any active user can be assigned regardless of source
     assignedAssociateId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
+      default: null,
+    },
+    // Associate acknowledgement tracking
+    acknowledgedAt: {
+      type: Date,
+      default: null,
+    },
+    acknowledgedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      default: null,
+    },
+    // Excluded associates (revoked associates who cannot claim or be assigned this line again)
+    excludedAssociateIds: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+      },
+    ],
+    // Revocation audit trail
+    revokedAt: {
+      type: Date,
+      default: null,
+    },
+    revokedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      default: null,
+    },
+    revocationReason: {
+      type: String,
       default: null,
     },
     // Unified two-step pipeline: needed → attached → ready

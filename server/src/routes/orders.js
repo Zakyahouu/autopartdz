@@ -104,6 +104,9 @@ router.get('/:id', async (req, res) => {
         select: '_id shortName fullName code category defaultSource hasTranslation pricing active',
       })
       .populate('assignedAssociateId', '_id name email role active')
+      .populate('acknowledgedBy', '_id name email role')
+      .populate('excludedAssociateIds', '_id name email role')
+      .populate('revokedBy', '_id name email role')
       .populate({
         path: 'parentLineId',
         select: '_id status documentTypeId correctionReason clientPrice',
@@ -264,19 +267,35 @@ router.patch('/:id/confirm', async (req, res) => {
             updateFields.source = source;
           }
 
-          const targetAccountId = associateId !== undefined ? associateId : chinaAccountId;
-          if (targetAccountId !== undefined) {
-            if (targetAccountId) {
-              if (!mongoose.Types.ObjectId.isValid(targetAccountId)) {
-                return res.status(400).json({ error: `Invalid associate user ID: ${targetAccountId}` });
+          const { delegationMode: updateDelegationMode } = update || {};
+          if (updateDelegationMode === 'open') {
+            updateFields.delegationMode = 'open';
+            updateFields.assignedAssociateId = null;
+            updateFields.acknowledgedAt = null;
+            updateFields.acknowledgedBy = null;
+          } else {
+            const targetAccountId = associateId !== undefined ? associateId : chinaAccountId;
+            if (targetAccountId !== undefined) {
+              if (targetAccountId) {
+                if (!mongoose.Types.ObjectId.isValid(targetAccountId)) {
+                  return res.status(400).json({ error: `Invalid associate user ID: ${targetAccountId}` });
+                }
+                const associate = await User.findOne({ _id: targetAccountId, active: true });
+                if (!associate) {
+                  return res.status(400).json({ error: 'Target user not found or inactive.' });
+                }
+                const lineDoc = await OrderDocumentLine.findOne({ _id: lineId, orderId: order._id });
+                if (lineDoc && (lineDoc.excludedAssociateIds || []).some(id => id.toString() === associate._id.toString())) {
+                  return res.status(400).json({
+                    error: `Associate "${associate.name}" is excluded from this document line and cannot be assigned.`,
+                  });
+                }
+                updateFields.assignedAssociateId = associate._id;
+                updateFields.delegationMode = 'specific';
+              } else {
+                updateFields.assignedAssociateId = null;
+                updateFields.delegationMode = 'none';
               }
-              const associate = await User.findOne({ _id: targetAccountId, active: true });
-              if (!associate) {
-                return res.status(400).json({ error: 'Target user not found or inactive.' });
-              }
-              updateFields.assignedAssociateId = associate._id;
-            } else {
-              updateFields.assignedAssociateId = null;
             }
           }
 
@@ -312,6 +331,9 @@ router.patch('/:id/confirm', async (req, res) => {
     const fullyPopulatedLines = await OrderDocumentLine.find({ orderId: order._id })
       .populate('documentTypeId', 'shortName fullName code category defaultSource')
       .populate('assignedAssociateId', '_id name email role active')
+      .populate('acknowledgedBy', '_id name email role')
+      .populate('excludedAssociateIds', '_id name email role')
+      .populate('revokedBy', '_id name email role')
       .populate({
         path: 'uploadedFiles',
         select: '_id filename contentType size uploadedAt uploadedByUserId',
@@ -333,12 +355,11 @@ router.patch('/:id/confirm', async (req, res) => {
 });
 
 // ── PATCH /api/orders/:orderId/lines/:lineId/assign ───────────────────────────
-// Admin-only: Delegates an associate to a specific document line.
-// Any active user can be assigned; no source restriction; callable at any time.
+// Admin-only: Delegates an associate to a specific document line, or opens it to pool.
 router.patch('/:orderId/lines/:lineId/assign', async (req, res) => {
   try {
     const { orderId, lineId } = req.params;
-    const { associateId, chinaAccountId } = req.body;
+    const { associateId, chinaAccountId, delegationMode } = req.body;
     const targetId = associateId !== undefined ? associateId : chinaAccountId;
 
     if (!mongoose.Types.ObjectId.isValid(orderId) || !mongoose.Types.ObjectId.isValid(lineId)) {
@@ -350,19 +371,58 @@ router.patch('/:orderId/lines/:lineId/assign', async (req, res) => {
       return res.status(404).json({ error: 'Order document line not found.' });
     }
 
+    // Check if open pool delegation requested
+    if (delegationMode === 'open') {
+      line.delegationMode = 'open';
+      line.assignedAssociateId = null;
+      line.acknowledgedAt = null;
+      line.acknowledgedBy = null;
+      line.activityLog.push({
+        timestamp: new Date(),
+        actorId: req.user._id,
+        actorRole: req.user.role,
+        action: 'delegated_open',
+        note: 'Opened line to China associate pool.',
+        fileId: null,
+      });
+      await line.save();
+
+      const populated = await OrderDocumentLine.findById(line._id)
+        .populate('documentTypeId', 'shortName fullName code category defaultSource')
+        .populate('assignedAssociateId', '_id name email role active')
+        .populate('acknowledgedBy', '_id name email role')
+        .populate('excludedAssociateIds', '_id name email role')
+        .populate('revokedBy', '_id name email role');
+
+      return res.json({
+        message: 'Line opened to China associate pool.',
+        line: populated,
+      });
+    }
+
     let assigneeId = null;
     if (targetId) {
       if (!mongoose.Types.ObjectId.isValid(targetId)) {
         return res.status(400).json({ error: 'Invalid associate user ID.' });
       }
+
+      if (line.excludedAssociateIds && line.excludedAssociateIds.some((id) => id.toString() === targetId.toString())) {
+        return res.status(400).json({ error: 'This associate was previously revoked from this line and cannot be assigned again.' });
+      }
+
       const associate = await User.findOne({ _id: targetId, active: true });
       if (!associate) {
         return res.status(400).json({ error: 'User not found or inactive.' });
       }
       assigneeId = associate._id;
+      line.delegationMode = 'specific';
+    } else {
+      line.delegationMode = 'none';
     }
 
     line.assignedAssociateId = assigneeId;
+    line.acknowledgedAt = null;
+    line.acknowledgedBy = null;
     line.activityLog.push({
       timestamp: new Date(),
       actorId: req.user._id,
@@ -375,7 +435,10 @@ router.patch('/:orderId/lines/:lineId/assign', async (req, res) => {
 
     const populated = await OrderDocumentLine.findById(line._id)
       .populate('documentTypeId', 'shortName fullName code category defaultSource')
-      .populate('assignedAssociateId', '_id name email role active');
+      .populate('assignedAssociateId', '_id name email role active')
+      .populate('acknowledgedBy', '_id name email role')
+      .populate('excludedAssociateIds', '_id name email role')
+      .populate('revokedBy', '_id name email role');
 
     return res.json({
       message: 'Line assignment updated.',
