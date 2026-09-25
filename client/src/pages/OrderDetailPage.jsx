@@ -21,8 +21,6 @@ import {
   RefreshCw,
   Paperclip,
   Download,
-  ThumbsUp,
-  ThumbsDown,
   Package,
   Truck,
   MapPin,
@@ -36,6 +34,11 @@ import {
   Globe,
   Sparkles,
   Ban,
+  LayoutGrid,
+  Table as TableIcon,
+  Columns,
+  SplitSquareVertical,
+  HelpCircle,
 } from 'lucide-react';
 
 const getStatusBadge = (status) => {
@@ -111,12 +114,22 @@ export default function OrderDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
 
+  // Concept switcher: 'split' | 'table' | 'dashboard'
+  const [activeConcept, setActiveConcept] = useState(() => {
+    return localStorage.getItem('autopartdz_order_detail_concept') || 'split';
+  });
+
+  const handleConceptChange = (concept) => {
+    setActiveConcept(concept);
+    localStorage.setItem('autopartdz_order_detail_concept', concept);
+  };
+
   const [order, setOrder] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [actionLoading, setActionLoading] = useState(false);
 
-  // Associates list (all active users)
+  // Associates list (active users)
   const [associates, setAssociates] = useState([]);
 
   // Line delegations: map of lineId -> { delegationMode: 'none' | 'open' | 'specific', associateId: string | null }
@@ -129,7 +142,7 @@ export default function OrderDetailPage() {
   const [lockBusy, setLockBusy] = useState(false);
   const [lockError, setLockError] = useState('');
 
-  // Admin attach modal (attach document to line directly)
+  // Admin attach modal
   const [adminAttachLine, setAdminAttachLine] = useState(null);
   const [adminAttachFile, setAdminAttachFile] = useState(null);
   const [adminAttachTracking, setAdminAttachTracking] = useState('');
@@ -169,7 +182,6 @@ export default function OrderDetailPage() {
     const { ok, data } = await apiFetch(`/orders/${id}`);
     if (ok && data) {
       setOrder(data);
-      // Initialize delegations from line data
       const delegations = {};
       (data.lines || []).forEach((l) => {
         const aId = l.assignedAssociateId?._id || l.assignedAssociateId || '';
@@ -212,7 +224,6 @@ export default function OrderDetailPage() {
       [lineId]: { delegationMode: targetMode, associateId: targetAssociateId },
     }));
 
-    // If order is already confirmed / active, persist immediately via assign endpoint
     if (order && order.status !== 'pending') {
       const payload = {
         delegationMode: targetMode,
@@ -324,7 +335,6 @@ export default function OrderDetailPage() {
     else alert(res.data?.error || 'Failed to confirm order.');
   };
 
-  // ── Lock submit (admin: approve or reject an attached line) ──────────────
   const handleLockSubmit = async (e) => {
     e.preventDefault();
     if (!lockApprove && !lockNote.trim()) {
@@ -349,7 +359,6 @@ export default function OrderDetailPage() {
     }
   };
 
-  // ── Admin attach submit (attach file to a line, triggers needed→attached) ─
   const handleAdminAttachSubmit = async (e) => {
     e.preventDefault();
     if (!adminAttachFile) {
@@ -385,7 +394,6 @@ export default function OrderDetailPage() {
     }
   };
 
-  // ── Fulfillment actions (package / dispatch / deliver) ─────────────────────
   const handleFulfillment = async (action) => {
     setFulfillmentBusy(true);
     try {
@@ -399,7 +407,6 @@ export default function OrderDetailPage() {
     }
   };
 
-  // ── Reject correction claim (terminal action) ─────────────────────────────
   const handleRejectOrder = async (e) => {
     e.preventDefault();
     if (!rejectReason.trim()) {
@@ -424,7 +431,6 @@ export default function OrderDetailPage() {
     }
   };
 
-  // Download / View file helper
   const handleDownloadFile = async (fileId, filename) => {
     try {
       const token = localStorage.getItem('autopartdz_token');
@@ -446,7 +452,6 @@ export default function OrderDetailPage() {
     }
   };
 
-  // Open file in new tab for direct viewing and native printing
   const handleOpenFile = async (fileId) => {
     try {
       const token = localStorage.getItem('autopartdz_token');
@@ -531,9 +536,6 @@ export default function OrderDetailPage() {
     return true;
   });
 
-  // Group lines into:
-  // 1) "Handling Locally" — delegationMode === 'none' and no associate
-  // 2) "Delegated to China" — delegationMode === 'specific' or 'open'
   const localLines = displayedLines.filter((l) => {
     const del = lineDelegations[l._id];
     const mode = del ? del.delegationMode : (l.delegationMode || 'none');
@@ -549,26 +551,79 @@ export default function OrderDetailPage() {
   const actionNeededCount = lines.filter((l) => ['needed', 'attached'].includes(l.status)).length;
   const readyCount = lines.filter((l) => !['needed', 'attached'].includes(l.status)).length;
 
-  // Render a document card
-  const renderDocumentCard = (line, isChinaGroup) => {
+  const isExcluded = (line, uId) =>
+    (line.excludedAssociateIds || []).some((ex) => (ex._id || ex).toString() === uId.toString());
+
+  // Helper for Delegation Select Dropdown
+  const renderDelegationSelect = (line, isCompact = false) => {
     const currentDel = lineDelegations[line._id] || {
       delegationMode: line.delegationMode || (line.assignedAssociateId ? 'specific' : 'none'),
       associateId: line.assignedAssociateId?._id || line.assignedAssociateId || null,
     };
-    const currentSelectValue =
+    const currentVal =
       currentDel.delegationMode === 'open'
         ? 'open'
         : currentDel.delegationMode === 'specific' && currentDel.associateId
         ? `specific:${currentDel.associateId}`
         : 'none';
 
+    return (
+      <select
+        className="admin-select"
+        value={currentVal}
+        onChange={(e) => {
+          const val = e.target.value;
+          if (val === 'none') {
+            handleDelegationChange(line._id, 'none', null);
+          } else if (val === 'open') {
+            handleDelegationChange(line._id, 'open', null);
+          } else if (val.startsWith('specific:')) {
+            const associateId = val.split(':')[1];
+            handleDelegationChange(line._id, 'specific', associateId);
+          }
+        }}
+        style={{
+          fontSize: isCompact ? 11 : 12,
+          height: isCompact ? 28 : 32,
+          padding: '2px 6px',
+          maxWidth: isCompact ? 180 : 230,
+          backgroundColor: currentDel.delegationMode !== 'none' ? 'rgba(37, 99, 235, 0.06)' : undefined,
+          borderColor: currentDel.delegationMode !== 'none' ? '#93c5fd' : undefined,
+          color: currentDel.delegationMode !== 'none' ? '#1d4ed8' : undefined,
+          fontWeight: currentDel.delegationMode !== 'none' ? 600 : 400,
+        }}
+      >
+        <option value="none">Local Station (Self)</option>
+        <option value="open">⚡ Open Pool (China)</option>
+        <optgroup label="China Associates">
+          {chinaAssociates.map((u) => {
+            const excluded = isExcluded(line, u._id);
+            return (
+              <option key={u._id} value={`specific:${u._id}`} disabled={excluded}>
+                🇨🇳 {u.name} {excluded ? '(Excluded)' : ''}
+              </option>
+            );
+          })}
+        </optgroup>
+        <optgroup label="Admin Personnel">
+          {associates
+            .filter((u) => u.role !== 'china_associate')
+            .map((u) => (
+              <option key={u._id} value={`specific:${u._id}`}>
+                Admin: {u.name}
+              </option>
+            ))}
+        </optgroup>
+      </select>
+    );
+  };
+
+  // Helper for Document Card (used in Concept 1 and Concept 3)
+  const renderCard = (line, isChinaGroup) => {
     const statusCfg = getStatusBadge(line.status);
     const rejectionNote =
       line.lastRejectionNote ||
       [...(line.activityLog || [])].reverse().find((e) => e.action === 'rejected')?.note;
-
-    const isExcluded = (uId) =>
-      (line.excludedAssociateIds || []).some((ex) => (ex._id || ex).toString() === uId.toString());
 
     return (
       <div
@@ -580,16 +635,15 @@ export default function OrderDetailPage() {
             line.status === 'needed' ? '#f59e0b' : line.status === 'attached' ? '#2563eb' : '#16a34a'
           }`,
           borderRadius: 8,
-          padding: '16px 18px',
+          padding: '14px 16px',
           boxShadow: '0 1px 3px rgba(0, 0, 0, 0.03)',
-          transition: 'border-color 0.15s ease',
         }}
       >
-        {/* Card Header: Document Name, Badges, Status, and Delete Action */}
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
-          <div style={{ flex: 1, minWidth: 240 }}>
+        {/* Card Header: Doc Name, Category, Badges */}
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
+          <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-              <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--admin-text-primary)' }}>
+              <span style={{ fontSize: 14.5, fontWeight: 700, color: 'var(--admin-text-primary)' }}>
                 {line.documentTypeId?.fullName || line.documentTypeId?.shortName || 'Document'}
               </span>
               {line.documentTypeId?.code && (
@@ -597,7 +651,7 @@ export default function OrderDetailPage() {
                   style={{
                     fontSize: 11,
                     fontFamily: 'var(--font-mono)',
-                    padding: '2px 7px',
+                    padding: '1px 6px',
                     borderRadius: 4,
                     backgroundColor: 'var(--admin-surface-2, #f1f5f9)',
                     border: '1px solid var(--admin-border, #e2e8f0)',
@@ -615,16 +669,15 @@ export default function OrderDetailPage() {
             </div>
           </div>
 
-          {/* Right side: Prominent Status Badge + Actions */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
             <span
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
-                gap: 5,
-                fontSize: 12,
+                gap: 4,
+                fontSize: 11.5,
                 fontWeight: 700,
-                padding: '4px 10px',
+                padding: '3px 8px',
                 borderRadius: 20,
                 backgroundColor: statusCfg.bg,
                 color: statusCfg.color,
@@ -635,22 +688,6 @@ export default function OrderDetailPage() {
               <span>{statusCfg.label}</span>
             </span>
 
-            {line.isDelayed && (
-              <span
-                style={{
-                  fontSize: 10.5,
-                  fontWeight: 700,
-                  padding: '3px 7px',
-                  borderRadius: 4,
-                  backgroundColor: 'rgba(239, 68, 68, 0.12)',
-                  color: '#dc2626',
-                  border: '1px solid rgba(239, 68, 68, 0.25)',
-                }}
-              >
-                DELAYED
-              </span>
-            )}
-
             {isPending && (
               <button
                 type="button"
@@ -660,22 +697,23 @@ export default function OrderDetailPage() {
                 disabled={actionLoading || lines.length <= 1}
                 style={{ padding: 4 }}
               >
-                <Trash2 size={14} />
+                <Trash2 size={13} />
               </button>
             )}
           </div>
         </div>
 
-        {/* China Delegation & Acknowledgment Status Bar (for China group) */}
+        {/* China Delegation Bar (only in China section) */}
         {isChinaGroup && (
           <div
             style={{
-              marginTop: 10,
-              padding: '8px 12px',
+              marginTop: 8,
+              padding: '6px 10px',
               borderRadius: 6,
-              backgroundColor: line.delegationMode === 'open' && !line.assignedAssociateId
-                ? 'rgba(5, 150, 105, 0.08)'
-                : 'rgba(37, 99, 235, 0.06)',
+              backgroundColor:
+                line.delegationMode === 'open' && !line.assignedAssociateId
+                  ? 'rgba(5, 150, 105, 0.08)'
+                  : 'rgba(37, 99, 235, 0.06)',
               border: `1px solid ${
                 line.delegationMode === 'open' && !line.assignedAssociateId
                   ? 'rgba(5, 150, 105, 0.25)'
@@ -686,38 +724,34 @@ export default function OrderDetailPage() {
               justifyContent: 'space-between',
               gap: 8,
               flexWrap: 'wrap',
-              fontSize: 12,
+              fontSize: 11.5,
             }}
           >
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
               {line.delegationMode === 'open' && !line.assignedAssociateId ? (
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: '#047857', fontWeight: 700 }}>
-                  <Sparkles size={14} color="#059669" />
-                  <span>Open Claim Pool (Unclaimed — visible to all China associates)</span>
+                <span style={{ color: '#047857', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                  <Sparkles size={13} color="#059669" />
+                  <span>Open Claim Pool (Unclaimed)</span>
                 </span>
               ) : line.assignedAssociateId ? (
                 <>
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: '#1e40af', fontWeight: 600 }}>
-                    <UserCheck size={14} color="#2563eb" />
-                    <span>Assigned: <strong>{line.assignedAssociateId.name || 'Associate'}</strong></span>
+                  <span style={{ color: '#1e40af', fontWeight: 600 }}>
+                    Assigned: <strong>{line.assignedAssociateId.name || 'Associate'}</strong>
                   </span>
                   <span>•</span>
                   {line.acknowledgedAt ? (
-                    <span style={{ color: '#16a34a', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                      <CheckCircle2 size={13} />
-                      <span>Receipt Confirmed ({new Date(line.acknowledgedAt).toLocaleString()})</span>
+                    <span style={{ color: '#16a34a', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                      <Check size={12} /> Receipt Confirmed
                     </span>
                   ) : (
-                    <span style={{ color: '#b45309', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                      <Clock size={13} />
-                      <span>Not yet acknowledged by associate</span>
+                    <span style={{ color: '#b45309', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                      <Clock size={12} /> Not yet acknowledged
                     </span>
                   )}
                 </>
               ) : null}
             </div>
 
-            {/* Revoke button (Admin only, visible if an associate is assigned) */}
             {line.assignedAssociateId && (
               <button
                 type="button"
@@ -727,22 +761,22 @@ export default function OrderDetailPage() {
                   setRevokeError('');
                 }}
                 style={{
-                  padding: '4px 10px',
+                  padding: '3px 8px',
                   borderRadius: 4,
                   border: '1px solid #fca5a5',
                   backgroundColor: '#ffffff',
                   color: '#dc2626',
-                  fontSize: 11.5,
+                  fontSize: 11,
                   fontWeight: 600,
                   display: 'inline-flex',
                   alignItems: 'center',
-                  gap: 4,
+                  gap: 3,
                   cursor: 'pointer',
                 }}
-                title="Revoke assignment and return line to China open claim pool"
+                title="Revoke associate assignment and reopen to pool"
               >
-                <UserX size={12} />
-                <span>Revoke & Reopen Pool</span>
+                <UserX size={11} />
+                <span>Revoke & Reopen</span>
               </button>
             )}
           </div>
@@ -752,78 +786,45 @@ export default function OrderDetailPage() {
         {line.revokedAt && (
           <div
             style={{
-              marginTop: 8,
-              padding: '6px 10px',
-              borderRadius: 6,
+              marginTop: 6,
+              padding: '4px 8px',
+              borderRadius: 4,
               backgroundColor: 'rgba(239, 68, 68, 0.05)',
               border: '1px solid rgba(239, 68, 68, 0.15)',
-              fontSize: 11.5,
+              fontSize: 11,
               color: '#991b1b',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 6,
             }}
           >
-            <Ban size={12} color="#dc2626" />
-            <span>
-              <strong>Revocation Audit:</strong> Reopened to pool by {line.revokedBy?.name || 'Admin'} on {new Date(line.revokedAt).toLocaleDateString()} — Reason: "{line.revocationReason}"
-            </span>
+            <strong>Revocation Audit:</strong> Reopened by {line.revokedBy?.name || 'Admin'} ("{line.revocationReason}")
           </div>
         )}
 
-        {/* Inline Correction Claim Note */}
-        {line.correctionReason && (
-          <div
-            style={{
-              marginTop: 10,
-              padding: '8px 12px',
-              borderRadius: 6,
-              backgroundColor: 'rgba(234, 88, 12, 0.08)',
-              border: '1px solid rgba(234, 88, 12, 0.25)',
-              fontSize: 12.5,
-              color: '#c2410c',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 8,
-            }}
-          >
-            <RotateCcw size={14} style={{ flexShrink: 0 }} />
-            <span><strong>Client Correction Claim:</strong> {line.correctionReason}</span>
-          </div>
-        )}
-
-        {/* Inline Rejection Note Callout */}
+        {/* Rejection Note Callout */}
         {line.status === 'needed' && rejectionNote && (
           <div
             style={{
-              marginTop: 10,
-              padding: '10px 14px',
+              marginTop: 8,
+              padding: '8px 10px',
               borderRadius: 6,
               backgroundColor: 'rgba(220, 38, 38, 0.08)',
               border: '1px solid rgba(220, 38, 38, 0.25)',
-              fontSize: 13,
+              fontSize: 12,
               color: '#991b1b',
               display: 'flex',
               alignItems: 'flex-start',
-              gap: 10,
+              gap: 8,
             }}
           >
-            <AlertTriangle size={16} color="#dc2626" style={{ flexShrink: 0, marginTop: 2 }} />
-            <div style={{ flex: 1, lineHeight: 1.45 }}>
-              <div style={{ fontWeight: 700, color: '#dc2626' }}>Document Rejected — Action Required</div>
-              <div style={{ marginTop: 2, color: '#7f1d1d' }}>Note: {rejectionNote}</div>
-              <div style={{ fontSize: 11.5, color: '#92400e', marginTop: 4 }}>
-                {line.assignedAssociateId
-                  ? 'Awaiting corrected upload from assigned associate.'
-                  : 'Attach corrected file or delegate to China associate.'}
-              </div>
+            <AlertTriangle size={14} color="#dc2626" style={{ flexShrink: 0, marginTop: 1 }} />
+            <div>
+              <strong>Revision Note:</strong> {rejectionNote}
             </div>
           </div>
         )}
 
-        {/* Uploaded / Attached Files List with PROMINENT Print Action */}
+        {/* Attached Files Strip */}
         {line.uploadedFiles && line.uploadedFiles.length > 0 && (
-          <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
             {line.uploadedFiles.map((f) => (
               <div
                 key={f._id}
@@ -831,76 +832,42 @@ export default function OrderDetailPage() {
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'space-between',
-                  padding: '10px 14px',
+                  padding: '6px 10px',
                   backgroundColor: 'var(--admin-surface-2, #f8fafc)',
                   border: '1px solid var(--admin-border, #e2e8f0)',
-                  borderRadius: 8,
-                  flexWrap: 'wrap',
-                  gap: 10,
+                  borderRadius: 6,
+                  fontSize: 12,
                 }}
               >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 200, flex: 1 }}>
-                  <div
-                    style={{
-                      width: 36,
-                      height: 36,
-                      borderRadius: 6,
-                      backgroundColor: 'rgba(168, 35, 27, 0.08)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      color: 'var(--admin-accent)',
-                      flexShrink: 0,
-                    }}
-                  >
-                    <FileText size={18} />
-                  </div>
-                  <div>
-                    <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--admin-text-primary)', wordBreak: 'break-all' }}>
-                      {f.filename}
-                    </div>
-                    <div style={{ fontSize: 11, color: 'var(--admin-text-secondary)', marginTop: 2 }}>
-                      {f.size ? `${Math.round(f.size / 1024)} KB` : ''} • Uploaded by {f.uploadedByUserId?.name || 'User'} {f.uploadedByUserId?.role ? `(${f.uploadedByUserId.role})` : ''} • {f.uploadedAt ? new Date(f.uploadedAt).toLocaleDateString() : ''}
-                    </div>
-                  </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+                  <FileText size={14} color="var(--admin-accent)" />
+                  <span style={{ fontWeight: 600, color: 'var(--admin-text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {f.filename}
+                  </span>
+                  <span style={{ fontSize: 11, color: 'var(--admin-text-muted)' }}>
+                    ({Math.round((f.size || 0) / 1024)} KB)
+                  </span>
                 </div>
 
-                {/* Print / View and Download buttons */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                   <button
                     type="button"
                     className="btn-admin-primary"
                     onClick={() => handleOpenFile(f._id)}
-                    style={{
-                      padding: '7px 14px',
-                      fontSize: 12.5,
-                      fontWeight: 600,
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: 6,
-                      backgroundColor: '#1e293b',
-                      borderColor: '#1e293b',
-                    }}
-                    title="Open file in new tab (native browser print)"
+                    style={{ padding: '4px 8px', fontSize: 11, display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                    title="Print or view"
                   >
-                    <Printer size={14} />
-                    <span>Print / View</span>
+                    <Printer size={12} />
+                    <span>Print</span>
                   </button>
                   <button
                     type="button"
                     className="btn-admin-secondary"
                     onClick={() => handleDownloadFile(f._id, f.filename)}
-                    style={{
-                      padding: '7px 12px',
-                      fontSize: 12,
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: 5,
-                    }}
-                    title="Download document file directly"
+                    style={{ padding: '4px 8px', fontSize: 11, display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                    title="Download file"
                   >
-                    <Download size={13} />
-                    <span>Download</span>
+                    <Download size={12} />
                   </button>
                 </div>
               </div>
@@ -908,98 +875,28 @@ export default function OrderDetailPage() {
           </div>
         )}
 
-        {/* Action & Controls Row */}
+        {/* Action Controls & Delegation Footer */}
         <div
           style={{
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
-            marginTop: 14,
-            paddingTop: 12,
+            marginTop: 10,
+            paddingTop: 8,
             borderTop: '1px solid var(--admin-border-subtle, #f1f5f9)',
             flexWrap: 'wrap',
-            gap: 12,
+            gap: 8,
           }}
         >
-          {/* Delegation Control Dropdown */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <span style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--admin-text-secondary)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                <UserCheck size={13} />
-                <span>Delegation:</span>
-              </span>
-              <select
-                className="admin-select"
-                value={currentSelectValue}
-                onChange={(e) => {
-                  const val = e.target.value;
-                  if (val === 'none') {
-                    handleDelegationChange(line._id, 'none', null);
-                  } else if (val === 'open') {
-                    handleDelegationChange(line._id, 'open', null);
-                  } else if (val.startsWith('specific:')) {
-                    const associateId = val.split(':')[1];
-                    handleDelegationChange(line._id, 'specific', associateId);
-                  }
-                }}
-                style={{
-                  fontSize: 12,
-                  height: 32,
-                  padding: '2px 8px',
-                  maxWidth: 240,
-                  backgroundColor: currentDel.delegationMode !== 'none' ? 'rgba(37, 99, 235, 0.06)' : undefined,
-                  borderColor: currentDel.delegationMode !== 'none' ? '#93c5fd' : undefined,
-                  color: currentDel.delegationMode !== 'none' ? '#1d4ed8' : undefined,
-                  fontWeight: currentDel.delegationMode !== 'none' ? 600 : 400,
-                }}
-              >
-                <option value="none">Handle Locally (Admin / Self)</option>
-                <option value="open">⚡ Open Pool (Any China Associate)</option>
-                <optgroup label="China Associates">
-                  {chinaAssociates.map((u) => {
-                    const excluded = isExcluded(u._id);
-                    return (
-                      <option key={u._id} value={`specific:${u._id}`} disabled={excluded}>
-                        🇨🇳 {u.name} {excluded ? '(Excluded from this line)' : ''}
-                      </option>
-                    );
-                  })}
-                </optgroup>
-                <optgroup label="Admin Personnel">
-                  {associates
-                    .filter((u) => u.role !== 'china_associate')
-                    .map((u) => (
-                      <option key={u._id} value={`specific:${u._id}`}>
-                        Admin: {u.name}
-                      </option>
-                    ))}
-                </optgroup>
-              </select>
-            </div>
-
-            {/* Courier Tracking Code Display */}
-            {(line.trackingCode || line.shippingTrackingCode) && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, fontFamily: 'var(--font-mono)' }}>
-                <span style={{ color: 'var(--admin-text-secondary)' }}>Tracking:</span>
-                <span style={{ fontWeight: 600 }}>{line.trackingCode || line.shippingTrackingCode}</span>
-                <button
-                  type="button"
-                  onClick={() => handleCopyTracking(line.trackingCode || line.shippingTrackingCode)}
-                  style={{ border: 'none', background: 'transparent', cursor: 'pointer', padding: 1 }}
-                  title="Copy tracking code"
-                >
-                  {copiedTracking === (line.trackingCode || line.shippingTrackingCode) ? (
-                    <Check size={11} color="#16a34a" />
-                  ) : (
-                    <Copy size={11} />
-                  )}
-                </button>
-              </div>
-            )}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ fontSize: 11, color: 'var(--admin-text-secondary)', display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+              <UserCheck size={12} />
+              <span>Delegation:</span>
+            </span>
+            {renderDelegationSelect(line)}
           </div>
 
-          {/* Primary Action Button */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             {line.status === 'needed' && (
               <button
                 type="button"
@@ -1011,18 +908,10 @@ export default function OrderDetailPage() {
                   setAdminAttachNote('');
                   setAdminAttachError('');
                 }}
-                style={{
-                  padding: '8px 18px',
-                  fontSize: 13,
-                  fontWeight: 700,
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 8,
-                  boxShadow: '0 2px 4px rgba(168, 35, 27, 0.2)',
-                }}
+                style={{ padding: '6px 14px', fontSize: 12, fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 6 }}
               >
-                <Paperclip size={16} />
-                <span>Attach Document</span>
+                <Paperclip size={14} />
+                <span>Attach</span>
               </button>
             )}
 
@@ -1036,81 +925,20 @@ export default function OrderDetailPage() {
                   setLockNote('');
                   setLockError('');
                 }}
-                style={{
-                  padding: '8px 18px',
-                  fontSize: 13,
-                  fontWeight: 700,
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 8,
-                  backgroundColor: '#16a34a',
-                  borderColor: '#16a34a',
-                  boxShadow: '0 2px 4px rgba(22, 163, 74, 0.2)',
-                }}
+                style={{ padding: '6px 14px', fontSize: 12, fontWeight: 700, backgroundColor: '#16a34a', borderColor: '#16a34a', display: 'inline-flex', alignItems: 'center', gap: 6 }}
               >
-                <Lock size={16} />
-                <span>Review & Lock Document</span>
+                <Lock size={14} />
+                <span>Review & Lock</span>
               </button>
             )}
 
             {['ready', 'packaged', 'sent_to_client', 'delivered', 'completed'].includes(line.status) && (
-              <span
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 6,
-                  fontSize: 12.5,
-                  fontWeight: 600,
-                  color: '#16a34a',
-                  padding: '6px 12px',
-                  borderRadius: 6,
-                  backgroundColor: 'rgba(22, 163, 74, 0.08)',
-                  border: '1px solid rgba(22, 163, 74, 0.25)',
-                }}
-              >
-                <CheckCircle2 size={15} />
-                <span>Document Locked & Ready</span>
+              <span style={{ fontSize: 11.5, fontWeight: 600, color: '#16a34a', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                <CheckCircle2 size={13} />
+                <span>Locked</span>
               </span>
             )}
           </div>
-        </div>
-
-        {/* Demoted Translation & Price Meta Info */}
-        <div
-          style={{
-            marginTop: 10,
-            fontSize: 11.5,
-            color: 'var(--admin-text-secondary)',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 10,
-            flexWrap: 'wrap',
-          }}
-        >
-          <span>
-            Translation:{' '}
-            <strong>
-              {line.translationMode === 'original_only'
-                ? 'Original Only'
-                : line.translationMode === 'original_plus_translation'
-                ? 'Original + Translation'
-                : 'Translation Only'}
-            </strong>
-          </span>
-          <span>•</span>
-          <span>
-            Client Price:{' '}
-            <strong style={{ fontFamily: 'var(--font-mono)' }}>
-              {line.clientPrice?.toLocaleString() ?? 0} DZD
-            </strong>
-          </span>
-          <span>•</span>
-          <span>
-            Cost Price:{' '}
-            <strong style={{ fontFamily: 'var(--font-mono)' }}>
-              {line.costPrice?.toLocaleString() ?? 0} DZD
-            </strong>
-          </span>
         </div>
       </div>
     );
@@ -1118,12 +946,106 @@ export default function OrderDetailPage() {
 
   return (
     <div>
-      {/* Top Breadcrumb & Actions */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+      {/* ── LIVE CONCEPT EXPLORATION SWITCHER (Requested by User) ───────────── */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: '10px 14px',
+          backgroundColor: '#0f172a',
+          borderRadius: 8,
+          marginBottom: 16,
+          color: '#ffffff',
+          boxShadow: '0 2px 8px rgba(15, 23, 42, 0.15)',
+          flexWrap: 'wrap',
+          gap: 10,
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <LayoutGrid size={16} color="#38bdf8" />
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: '#f8fafc' }}>
+              Concept Switcher (Exploration Mode)
+            </div>
+            <div style={{ fontSize: 11, color: '#94a3b8' }}>
+              Switch between the 3 UI designs live on this order to select your preferred layout
+            </div>
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', gap: 6, backgroundColor: '#1e293b', padding: 3, borderRadius: 6 }}>
+          <button
+            type="button"
+            onClick={() => handleConceptChange('split')}
+            style={{
+              padding: '6px 12px',
+              borderRadius: 4,
+              border: 'none',
+              backgroundColor: activeConcept === 'split' ? '#38bdf8' : 'transparent',
+              color: activeConcept === 'split' ? '#0f172a' : '#94a3b8',
+              fontSize: 12,
+              fontWeight: 700,
+              cursor: 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 5,
+            }}
+          >
+            <SplitSquareVertical size={13} />
+            <span>1. Clean Split</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => handleConceptChange('table')}
+            style={{
+              padding: '6px 12px',
+              borderRadius: 4,
+              border: 'none',
+              backgroundColor: activeConcept === 'table' ? '#38bdf8' : 'transparent',
+              color: activeConcept === 'table' ? '#0f172a' : '#94a3b8',
+              fontSize: 12,
+              fontWeight: 700,
+              cursor: 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 5,
+            }}
+          >
+            <TableIcon size={13} />
+            <span>2. Executive Table</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => handleConceptChange('dashboard')}
+            style={{
+              padding: '6px 12px',
+              borderRadius: 4,
+              border: 'none',
+              backgroundColor: activeConcept === 'dashboard' ? '#38bdf8' : 'transparent',
+              color: activeConcept === 'dashboard' ? '#0f172a' : '#94a3b8',
+              fontSize: 12,
+              fontWeight: 700,
+              cursor: 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 5,
+            }}
+          >
+            <Columns size={13} />
+            <span>3. 2-Col Dashboard</span>
+          </button>
+        </div>
+      </div>
+
+      {/* ── Top Header & Global Actions ──────────────────────────────────────── */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, flexWrap: 'wrap', gap: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <Link to="/admin/orders" className="btn-admin-secondary" style={{ padding: '6px 10px' }}>
             <ArrowLeft size={14} />
-            <span>Orders Queue</span>
+            <span>Queue</span>
           </Link>
           <h1 style={{ fontSize: 18, fontWeight: 700, color: 'var(--admin-text-primary)', margin: 0 }}>
             Order <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--admin-accent)' }}>{order.trackingCode}</span>
@@ -1166,7 +1088,6 @@ export default function OrderDetailPage() {
             </button>
           )}
 
-          {/* Correction Order Reject Action (Terminal) */}
           {isPending && (order.isCorrection || order.orderType === 'correction') && (
             <button
               type="button"
@@ -1185,7 +1106,6 @@ export default function OrderDetailPage() {
             </button>
           )}
 
-          {/* Fulfillment Actions for Active/Ready Orders */}
           {!isPending && order.status === 'ready_for_dispatch' && (
             <button
               type="button"
@@ -1227,304 +1147,526 @@ export default function OrderDetailPage() {
         </div>
       </div>
 
-      {/* Main Order Dossier Grid */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 16, marginBottom: 20 }}>
-        {/* Client Card */}
-        <div className="admin-card" style={{ padding: 18 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14, borderBottom: '1px solid var(--admin-border)', paddingBottom: 10 }}>
-            <User size={16} color="var(--admin-accent)" />
-            <h2 style={{ fontSize: 14, fontWeight: 700, color: 'var(--admin-text-primary)', margin: 0 }}>
-              Client Information
-            </h2>
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr', gap: '8px 12px', fontSize: 13 }}>
-            <span style={{ color: 'var(--admin-text-secondary)' }}>Full Name:</span>
-            <span style={{ fontWeight: 600, color: 'var(--admin-text-primary)' }}>
-              {order.firstName} {order.lastName}
-            </span>
-
-            <span style={{ color: 'var(--admin-text-secondary)' }}>Phone:</span>
-            <span style={{ fontFamily: 'var(--font-mono)' }}>{order.phone}</span>
-
-            <span style={{ color: 'var(--admin-text-secondary)' }}>Wilaya:</span>
-            <span>{order.wilaya}</span>
-
-            <span style={{ color: 'var(--admin-text-secondary)' }}>Full Address:</span>
-            <span>{order.address}</span>
-
-            <span style={{ color: 'var(--admin-text-secondary)' }}>Email:</span>
-            <span>{order.email || '—'}</span>
-
-            <span style={{ color: 'var(--admin-text-secondary)' }}>Passport No:</span>
-            <span style={{ fontFamily: 'var(--font-mono)' }}>{order.passportNumber || '—'}</span>
-
-            {order.note && (
-              <>
-                <span style={{ color: 'var(--admin-text-secondary)' }}>Notes:</span>
-                <span style={{ fontStyle: 'italic', color: 'var(--admin-text-secondary)' }}>{order.note}</span>
-              </>
-            )}
-          </div>
-        </div>
-
-        {/* Vehicle Card */}
-        <div className="admin-card" style={{ padding: 18 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14, borderBottom: '1px solid var(--admin-border)', paddingBottom: 10 }}>
-            <Car size={16} color="var(--admin-accent)" />
-            <h2 style={{ fontSize: 14, fontWeight: 700, color: 'var(--admin-text-primary)', margin: 0 }}>
-              Vehicle Specifications
-            </h2>
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr', gap: '8px 12px', fontSize: 13 }}>
-            <span style={{ color: 'var(--admin-text-secondary)' }}>Chassis VIN:</span>
-            <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, color: 'var(--admin-accent)' }}>
-              {order.vin}
-            </span>
-
-            <span style={{ color: 'var(--admin-text-secondary)' }}>Make / Model:</span>
-            <span>{order.carModel || '—'}</span>
-
-            <span style={{ color: 'var(--admin-text-secondary)' }}>Category:</span>
-            <span>{order.carCategoryId?.name || 'Custom'}</span>
-
-            <span style={{ color: 'var(--admin-text-secondary)' }}>Forwarder / Agency:</span>
-            <span>{order.importAgency || '—'}</span>
-          </div>
-        </div>
-      </div>
-
-      {/* Document Dossier (Document-First Card List Grouped by Fulfillment Station) */}
-      <div className="admin-card" style={{ padding: 0, overflow: 'hidden', marginBottom: 20 }}>
-        {/* Header with Title and Filter Tabs */}
-        <div
-          style={{
-            padding: '16px 20px',
-            borderBottom: '1px solid var(--admin-border)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            flexWrap: 'wrap',
-            gap: 12,
-            backgroundColor: 'var(--admin-surface)',
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
-            <div>
-              <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--admin-text-primary)', margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
-                <FileText size={18} color="var(--admin-accent)" />
-                <span>Document Dossier ({lines.length})</span>
-              </h2>
-              <p style={{ fontSize: 12, color: 'var(--admin-text-secondary)', marginTop: 2, marginBottom: 0 }}>
-                Organized by fulfillment delegation: Local vs. China Operations.
-              </p>
+      {/* ═══════════════════════════════════════════════════════════════════════ */}
+      {/* CONCEPT 1: CLEAN MODERN SPLIT (Local vs China Sections)                 */}
+      {/* ═══════════════════════════════════════════════════════════════════════ */}
+      {activeConcept === 'split' && (
+        <div>
+          {/* Client & Vehicle Summary Cards */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 14, marginBottom: 18 }}>
+            <div className="admin-card" style={{ padding: 14 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10, borderBottom: '1px solid var(--admin-border)', paddingBottom: 6 }}>
+                <User size={15} color="var(--admin-accent)" />
+                <h2 style={{ fontSize: 13, fontWeight: 700, color: 'var(--admin-text-primary)', margin: 0 }}>
+                  Client Profile
+                </h2>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '100px 1fr', gap: '6px 10px', fontSize: 12.5 }}>
+                <span style={{ color: 'var(--admin-text-secondary)' }}>Full Name:</span>
+                <span style={{ fontWeight: 600 }}>{order.firstName} {order.lastName}</span>
+                <span style={{ color: 'var(--admin-text-secondary)' }}>Phone:</span>
+                <span style={{ fontFamily: 'monospace' }}>{order.phone}</span>
+                <span style={{ color: 'var(--admin-text-secondary)' }}>Passport:</span>
+                <span style={{ fontFamily: 'monospace' }}>{order.passportNumber || '—'}</span>
+                <span style={{ color: 'var(--admin-text-secondary)' }}>Address:</span>
+                <span>{order.address}, {order.wilaya}</span>
+              </div>
             </div>
 
-            {/* Quick Status Filter Tabs */}
+            <div className="admin-card" style={{ padding: 14 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10, borderBottom: '1px solid var(--admin-border)', paddingBottom: 6 }}>
+                <Car size={15} color="var(--admin-accent)" />
+                <h2 style={{ fontSize: 13, fontWeight: 700, color: 'var(--admin-text-primary)', margin: 0 }}>
+                  Vehicle Specifications
+                </h2>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '100px 1fr', gap: '6px 10px', fontSize: 12.5 }}>
+                <span style={{ color: 'var(--admin-text-secondary)' }}>VIN:</span>
+                <span style={{ fontFamily: 'monospace', fontWeight: 700, color: 'var(--admin-accent)' }}>{order.vin}</span>
+                <span style={{ color: 'var(--admin-text-secondary)' }}>Model:</span>
+                <span>{order.carModel || '—'}</span>
+                <span style={{ color: 'var(--admin-text-secondary)' }}>Category:</span>
+                <span>{order.carCategoryId?.name || 'Custom'}</span>
+                <span style={{ color: 'var(--admin-text-secondary)' }}>Forwarder:</span>
+                <span>{order.importAgency || '—'}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Dossier Header with Filter Tabs */}
+          <div className="admin-card" style={{ padding: 0, overflow: 'hidden' }}>
             <div
               style={{
+                padding: '12px 18px',
+                borderBottom: '1px solid var(--admin-border)',
                 display: 'flex',
                 alignItems: 'center',
-                gap: 2,
-                backgroundColor: 'var(--admin-surface-2, #f1f5f9)',
-                padding: '3px',
-                borderRadius: 6,
-                border: '1px solid var(--admin-border)',
+                justifyContent: 'space-between',
+                flexWrap: 'wrap',
+                gap: 10,
+                backgroundColor: 'var(--admin-surface)',
               }}
             >
-              <button
-                type="button"
-                onClick={() => setFilterTab('all')}
-                style={{
-                  padding: '4px 10px',
-                  fontSize: 12,
-                  fontWeight: filterTab === 'all' ? 700 : 500,
-                  border: 'none',
-                  borderRadius: 4,
-                  backgroundColor: filterTab === 'all' ? 'var(--admin-surface, #ffffff)' : 'transparent',
-                  color: filterTab === 'all' ? 'var(--admin-text-primary)' : 'var(--admin-text-secondary)',
-                  cursor: 'pointer',
-                  boxShadow: filterTab === 'all' ? '0 1px 2px rgba(0,0,0,0.06)' : 'none',
-                }}
-              >
-                All ({lines.length})
-              </button>
-              <button
-                type="button"
-                onClick={() => setFilterTab('action_needed')}
-                style={{
-                  padding: '4px 10px',
-                  fontSize: 12,
-                  fontWeight: filterTab === 'action_needed' ? 700 : 500,
-                  border: 'none',
-                  borderRadius: 4,
-                  backgroundColor: filterTab === 'action_needed' ? 'var(--admin-surface, #ffffff)' : 'transparent',
-                  color: filterTab === 'action_needed' ? '#b45309' : 'var(--admin-text-secondary)',
-                  cursor: 'pointer',
-                  boxShadow: filterTab === 'action_needed' ? '0 1px 2px rgba(0,0,0,0.06)' : 'none',
-                }}
-              >
-                Action Needed ({actionNeededCount})
-              </button>
-              <button
-                type="button"
-                onClick={() => setFilterTab('ready')}
-                style={{
-                  padding: '4px 10px',
-                  fontSize: 12,
-                  fontWeight: filterTab === 'ready' ? 700 : 500,
-                  border: 'none',
-                  borderRadius: 4,
-                  backgroundColor: filterTab === 'ready' ? 'var(--admin-surface, #ffffff)' : 'transparent',
-                  color: filterTab === 'ready' ? '#15803d' : 'var(--admin-text-secondary)',
-                  cursor: 'pointer',
-                  boxShadow: filterTab === 'ready' ? '0 1px 2px rgba(0,0,0,0.06)' : 'none',
-                }}
-              >
-                Locked & Ready ({readyCount})
-              </button>
-            </div>
-          </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <h2 style={{ fontSize: 15, fontWeight: 700, color: 'var(--admin-text-primary)', margin: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <FileText size={16} color="var(--admin-accent)" />
+                  <span>Document Dossier ({lines.length})</span>
+                </h2>
 
-          {isPending && (
-            <button
-              type="button"
-              className="btn-admin-secondary"
-              onClick={() => setAddModalOpen(true)}
-              style={{ padding: '6px 14px', fontSize: 12.5 }}
-            >
-              <Plus size={14} />
-              <span>Add Document Line</span>
-            </button>
-          )}
-        </div>
+                <div style={{ display: 'flex', gap: 2, backgroundColor: 'var(--admin-surface-2, #f1f5f9)', padding: 2, borderRadius: 6 }}>
+                  <button
+                    type="button"
+                    onClick={() => setFilterTab('all')}
+                    style={{
+                      padding: '3px 8px',
+                      fontSize: 11.5,
+                      fontWeight: filterTab === 'all' ? 700 : 500,
+                      border: 'none',
+                      borderRadius: 4,
+                      backgroundColor: filterTab === 'all' ? '#ffffff' : 'transparent',
+                      color: filterTab === 'all' ? '#0f172a' : '#64748b',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    All ({lines.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFilterTab('action_needed')}
+                    style={{
+                      padding: '3px 8px',
+                      fontSize: 11.5,
+                      fontWeight: filterTab === 'action_needed' ? 700 : 500,
+                      border: 'none',
+                      borderRadius: 4,
+                      backgroundColor: filterTab === 'action_needed' ? '#ffffff' : 'transparent',
+                      color: filterTab === 'action_needed' ? '#b45309' : '#64748b',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Action Needed ({actionNeededCount})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFilterTab('ready')}
+                    style={{
+                      padding: '3px 8px',
+                      fontSize: 11.5,
+                      fontWeight: filterTab === 'ready' ? 700 : 500,
+                      border: 'none',
+                      borderRadius: 4,
+                      backgroundColor: filterTab === 'ready' ? '#ffffff' : 'transparent',
+                      color: filterTab === 'ready' ? '#15803d' : '#64748b',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Ready ({readyCount})
+                  </button>
+                </div>
+              </div>
 
-        {/* Grouped Document Card List */}
-        <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: 24 }}>
-          {lines.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--admin-text-muted)' }}>
-              No document lines on this order.
-            </div>
-          ) : (
-            <>
-              {/* ── SECTION 1: HANDLING LOCALLY ────────────────────────────────────────── */}
-              <div>
-                <div
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    marginBottom: 12,
-                    paddingBottom: 8,
-                    borderBottom: '2px solid var(--admin-border)',
-                  }}
+              {isPending && (
+                <button
+                  type="button"
+                  className="btn-admin-secondary"
+                  onClick={() => setAddModalOpen(true)}
+                  style={{ padding: '5px 12px', fontSize: 12 }}
                 >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <Building2 size={16} color="var(--admin-accent)" />
-                    <h3 style={{ fontSize: 14, fontWeight: 700, color: 'var(--admin-text-primary)', margin: 0 }}>
-                      Handling Locally (Headquarters)
+                  <Plus size={13} />
+                  <span>Add Line</span>
+                </button>
+              )}
+            </div>
+
+            {/* Split Groups List */}
+            <div style={{ padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 20 }}>
+              {/* Group 1: Local Station */}
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10, paddingBottom: 6, borderBottom: '2px solid var(--admin-border)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <Building2 size={15} color="var(--admin-accent)" />
+                    <h3 style={{ fontSize: 13.5, fontWeight: 700, margin: 0, color: 'var(--admin-text-primary)' }}>
+                      Local Headquarters Station
                     </h3>
-                    <span
-                      style={{
-                        fontSize: 11,
-                        fontWeight: 700,
-                        padding: '2px 8px',
-                        borderRadius: 12,
-                        backgroundColor: 'var(--admin-surface-2, #f1f5f9)',
-                        color: 'var(--admin-text-secondary)',
-                      }}
-                    >
+                    <span style={{ fontSize: 11, fontWeight: 700, padding: '1px 6px', borderRadius: 10, backgroundColor: '#f1f5f9', color: '#475569' }}>
                       {localLines.length}
                     </span>
                   </div>
-                  <span style={{ fontSize: 12, color: 'var(--admin-text-muted)' }}>
-                    Managed directly without China associate delegation
-                  </span>
+                  <span style={{ fontSize: 11.5, color: '#64748b' }}>Managed directly without China delegation</span>
                 </div>
 
                 {localLines.length === 0 ? (
-                  <div
-                    style={{
-                      padding: '16px',
-                      borderRadius: 6,
-                      backgroundColor: 'var(--admin-surface-2, #f8fafc)',
-                      border: '1px dashed var(--admin-border)',
-                      textAlign: 'center',
-                      color: 'var(--admin-text-muted)',
-                      fontSize: 12.5,
-                    }}
-                  >
-                    No documents currently designated for local handling.
+                  <div style={{ padding: '12px', textAlign: 'center', color: '#94a3b8', fontSize: 12, backgroundColor: '#f8fafc', borderRadius: 6, border: '1px dashed #e2e8f0' }}>
+                    No documents marked for local handling.
                   </div>
                 ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                    {localLines.map((line) => renderDocumentCard(line, false))}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    {localLines.map((l) => renderCard(l, false))}
                   </div>
                 )}
               </div>
 
-              {/* ── SECTION 2: DELEGATED TO CHINA ──────────────────────────────────────── */}
+              {/* Group 2: China Station */}
               <div>
-                <div
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    marginBottom: 12,
-                    paddingBottom: 8,
-                    borderBottom: '2px solid #93c5fd',
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <Globe size={16} color="#2563eb" />
-                    <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1e40af', margin: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10, paddingBottom: 6, borderBottom: '2px solid #93c5fd' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <Globe size={15} color="#2563eb" />
+                    <h3 style={{ fontSize: 13.5, fontWeight: 700, margin: 0, color: '#1e40af' }}>
                       Delegated to China Operations
                     </h3>
-                    <span
-                      style={{
-                        fontSize: 11,
-                        fontWeight: 700,
-                        padding: '2px 8px',
-                        borderRadius: 12,
-                        backgroundColor: '#dbeafe',
-                        color: '#1d4ed8',
-                      }}
-                    >
+                    <span style={{ fontSize: 11, fontWeight: 700, padding: '1px 6px', borderRadius: 10, backgroundColor: '#dbeafe', color: '#1d4ed8' }}>
                       {chinaLines.length}
                     </span>
                   </div>
-                  <span style={{ fontSize: 12, color: 'var(--admin-text-muted)' }}>
-                    Assigned to specific associates or open in claim pool
-                  </span>
+                  <span style={{ fontSize: 11.5, color: '#64748b' }}>Assigned or in Open Claim Pool</span>
                 </div>
 
                 {chinaLines.length === 0 ? (
-                  <div
-                    style={{
-                      padding: '16px',
-                      borderRadius: 6,
-                      backgroundColor: '#eff6ff',
-                      border: '1px dashed #bfdbfe',
-                      textAlign: 'center',
-                      color: '#64748b',
-                      fontSize: 12.5,
-                    }}
-                  >
-                    No documents currently delegated to China operations. Select "Open Pool" or an associate to delegate.
+                  <div style={{ padding: '12px', textAlign: 'center', color: '#94a3b8', fontSize: 12, backgroundColor: '#eff6ff', borderRadius: 6, border: '1px dashed #bfdbfe' }}>
+                    No documents currently delegated to China.
                   </div>
                 ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                    {chinaLines.map((line) => renderDocumentCard(line, true))}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    {chinaLines.map((l) => renderCard(l, true))}
                   </div>
                 )}
               </div>
-            </>
-          )}
+            </div>
+          </div>
         </div>
-      </div>
+      )}
 
-      {/* Add Document Line Modal */}
+      {/* ═══════════════════════════════════════════════════════════════════════ */}
+      {/* CONCEPT 2: EXECUTIVE DATA TABLE (High Density Enterprise Table)         */}
+      {/* ═══════════════════════════════════════════════════════════════════════ */}
+      {activeConcept === 'table' && (
+        <div>
+          {/* Compact Dossier Header Ribbon */}
+          <div
+            style={{
+              padding: '10px 14px',
+              backgroundColor: '#ffffff',
+              borderRadius: 8,
+              border: '1px solid #e2e8f0',
+              marginBottom: 14,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexWrap: 'wrap',
+              gap: 12,
+              fontSize: 12.5,
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <User size={15} color="var(--admin-accent)" />
+              <strong>{order.firstName} {order.lastName}</strong>
+              <span style={{ color: '#64748b' }}>({order.phone})</span>
+              <span>•</span>
+              <span style={{ color: '#64748b' }}>Passport: <strong style={{ color: '#0f172a' }}>{order.passportNumber || '—'}</strong></span>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <Car size={15} color="#2563eb" />
+              <span>{order.carModel}</span>
+              <span>•</span>
+              <span style={{ fontFamily: 'monospace', fontWeight: 700, color: 'var(--admin-accent)' }}>VIN: {order.vin}</span>
+            </div>
+
+            {isPending && (
+              <button
+                type="button"
+                className="btn-admin-secondary"
+                onClick={() => setAddModalOpen(true)}
+                style={{ padding: '4px 10px', fontSize: 11.5 }}
+              >
+                <Plus size={12} />
+                <span>Add Document</span>
+              </button>
+            )}
+          </div>
+
+          {/* High-Density Data Table */}
+          <div className="admin-card" style={{ padding: 0, overflow: 'hidden' }}>
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: 12.5 }}>
+                <thead>
+                  <tr style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0', color: '#475569', fontWeight: 700 }}>
+                    <th style={{ padding: '10px 14px' }}>Document Name & Code</th>
+                    <th style={{ padding: '10px 14px' }}>Fulfillment Station & Assignee</th>
+                    <th style={{ padding: '10px 14px' }}>Status</th>
+                    <th style={{ padding: '10px 14px' }}>Attached Files</th>
+                    <th style={{ padding: '10px 14px', textAlign: 'right' }}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {displayedLines.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} style={{ padding: '24px', textAlign: 'center', color: '#94a3b8' }}>
+                        No document lines found.
+                      </td>
+                    </tr>
+                  ) : (
+                    displayedLines.map((line) => {
+                      const statusCfg = getStatusBadge(line.status);
+                      const isChina = line.delegationMode === 'open' || line.delegationMode === 'specific' || Boolean(line.assignedAssociateId);
+
+                      return (
+                        <tr key={line._id} style={{ borderBottom: '1px solid #f1f5f9', verticalAlign: 'middle' }}>
+                          {/* Document Name */}
+                          <td style={{ padding: '10px 14px' }}>
+                            <div style={{ fontWeight: 700, color: '#0f172a' }}>
+                              {line.documentTypeId?.fullName || line.documentTypeId?.shortName}
+                            </div>
+                            <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>
+                              {line.documentTypeId?.code && <span style={{ fontFamily: 'monospace' }}>[{line.documentTypeId.code}] </span>}
+                              {line.translationMode === 'original_plus_translation' ? 'Orig + Translation' : 'Original Only'}
+                            </div>
+                            {line.lastRejectionNote && line.status === 'needed' && (
+                              <div style={{ fontSize: 11, color: '#dc2626', marginTop: 2 }}>
+                                ⚠️ Rejected: {line.lastRejectionNote}
+                              </div>
+                            )}
+                          </td>
+
+                          {/* Station & Delegation Dropdown */}
+                          <td style={{ padding: '10px 14px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                              {renderDelegationSelect(line, true)}
+                              {isChina && line.assignedAssociateId && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setRevokeLine(line);
+                                    setRevokeReason('');
+                                    setRevokeError('');
+                                  }}
+                                  style={{
+                                    border: 'none',
+                                    background: 'transparent',
+                                    color: '#dc2626',
+                                    cursor: 'pointer',
+                                    padding: 2,
+                                  }}
+                                  title="Revoke associate assignment"
+                                >
+                                  <UserX size={13} />
+                                </button>
+                              )}
+                            </div>
+                            {isChina && (
+                              <div style={{ fontSize: 11, marginTop: 2 }}>
+                                {line.delegationMode === 'open' && !line.assignedAssociateId ? (
+                                  <span style={{ color: '#047857', fontWeight: 600 }}>⚡ Open Claim Pool</span>
+                                ) : line.acknowledgedAt ? (
+                                  <span style={{ color: '#16a34a' }}>✓ Confirmed Receipt</span>
+                                ) : (
+                                  <span style={{ color: '#b45309' }}>⏳ Unacknowledged</span>
+                                )}
+                              </div>
+                            )}
+                          </td>
+
+                          {/* Status Pill */}
+                          <td style={{ padding: '10px 14px' }}>
+                            <span
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: 4,
+                                fontSize: 11,
+                                fontWeight: 700,
+                                padding: '2px 8px',
+                                borderRadius: 12,
+                                backgroundColor: statusCfg.bg,
+                                color: statusCfg.color,
+                                border: `1px solid ${statusCfg.border}`,
+                              }}
+                            >
+                              {statusCfg.icon}
+                              <span>{statusCfg.label}</span>
+                            </span>
+                          </td>
+
+                          {/* Files */}
+                          <td style={{ padding: '10px 14px' }}>
+                            {line.uploadedFiles && line.uploadedFiles.length > 0 ? (
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenFile(line.uploadedFiles[0]._id)}
+                                  style={{
+                                    border: 'none',
+                                    background: 'transparent',
+                                    color: '#1e40af',
+                                    cursor: 'pointer',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: 3,
+                                    fontSize: 11.5,
+                                    fontWeight: 600,
+                                  }}
+                                  title="Print or view"
+                                >
+                                  <Printer size={12} />
+                                  <span>View</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDownloadFile(line.uploadedFiles[0]._id, line.uploadedFiles[0].filename)}
+                                  style={{
+                                    border: 'none',
+                                    background: 'transparent',
+                                    color: '#64748b',
+                                    cursor: 'pointer',
+                                    padding: 2,
+                                  }}
+                                  title="Download file"
+                                >
+                                  <Download size={12} />
+                                </button>
+                              </div>
+                            ) : (
+                              <span style={{ color: '#94a3b8', fontSize: 11 }}>No files</span>
+                            )}
+                          </td>
+
+                          {/* Actions */}
+                          <td style={{ padding: '10px 14px', textAlign: 'right' }}>
+                            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                              {line.status === 'needed' && (
+                                <button
+                                  type="button"
+                                  className="btn-admin-primary"
+                                  onClick={() => {
+                                    setAdminAttachLine(line);
+                                    setAdminAttachFile(null);
+                                    setAdminAttachTracking(line.trackingCode || '');
+                                    setAdminAttachNote('');
+                                    setAdminAttachError('');
+                                  }}
+                                  style={{ padding: '4px 10px', fontSize: 11.5 }}
+                                >
+                                  <Paperclip size={12} />
+                                  <span>Attach</span>
+                                </button>
+                              )}
+
+                              {line.status === 'attached' && (
+                                <button
+                                  type="button"
+                                  className="btn-admin-primary"
+                                  onClick={() => {
+                                    setLockLine(line);
+                                    setLockApprove(true);
+                                    setLockNote('');
+                                    setLockError('');
+                                  }}
+                                  style={{ padding: '4px 10px', fontSize: 11.5, backgroundColor: '#16a34a', borderColor: '#16a34a' }}
+                                >
+                                  <Lock size={12} />
+                                  <span>Lock</span>
+                                </button>
+                              )}
+
+                              {isPending && (
+                                <button
+                                  type="button"
+                                  className="btn-admin-icon danger"
+                                  onClick={() => handleRemoveLine(line._id)}
+                                  disabled={actionLoading || lines.length <= 1}
+                                  style={{ padding: 3 }}
+                                >
+                                  <Trash2 size={13} />
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════════════════ */}
+      {/* CONCEPT 3: TWO-COLUMN DASHBOARD (Command Center Layout)                */}
+      {/* ═══════════════════════════════════════════════════════════════════════ */}
+      {activeConcept === 'dashboard' && (
+        <div style={{ display: 'grid', gridTemplateColumns: '320px 1fr', gap: 16, alignItems: 'start' }}>
+          {/* Left Column: Fixed Executive Profile */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div className="admin-card" style={{ padding: 14 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10, borderBottom: '1px solid #e2e8f0', paddingBottom: 6 }}>
+                <User size={15} color="var(--admin-accent)" />
+                <h3 style={{ fontSize: 13, fontWeight: 700, margin: 0 }}>Client Dossier</h3>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 12 }}>
+                <div><span style={{ color: '#64748b' }}>Name:</span> <strong>{order.firstName} {order.lastName}</strong></div>
+                <div><span style={{ color: '#64748b' }}>Phone:</span> <span style={{ fontFamily: 'monospace' }}>{order.phone}</span></div>
+                <div><span style={{ color: '#64748b' }}>Passport:</span> <span style={{ fontFamily: 'monospace' }}>{order.passportNumber || '—'}</span></div>
+                <div><span style={{ color: '#64748b' }}>Address:</span> {order.address}, {order.wilaya}</div>
+              </div>
+            </div>
+
+            <div className="admin-card" style={{ padding: 14 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10, borderBottom: '1px solid #e2e8f0', paddingBottom: 6 }}>
+                <Car size={15} color="#2563eb" />
+                <h3 style={{ fontSize: 13, fontWeight: 700, margin: 0 }}>Vehicle Specs</h3>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 12 }}>
+                <div><span style={{ color: '#64748b' }}>VIN:</span> <strong style={{ color: 'var(--admin-accent)', fontFamily: 'monospace' }}>{order.vin}</strong></div>
+                <div><span style={{ color: '#64748b' }}>Model:</span> {order.carModel || '—'}</div>
+                <div><span style={{ color: '#64748b' }}>Category:</span> {order.carCategoryId?.name || 'Custom'}</div>
+              </div>
+            </div>
+
+            <div className="admin-card" style={{ padding: 14, backgroundColor: '#f8fafc' }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: '#475569', marginBottom: 6 }}>Order Progress</div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: '#0f172a' }}>
+                {readyCount} of {lines.length} Documents Ready
+              </div>
+              <div style={{ width: '100%', height: 6, backgroundColor: '#e2e8f0', borderRadius: 3, marginTop: 6, overflow: 'hidden' }}>
+                <div
+                  style={{
+                    width: `${lines.length > 0 ? (readyCount / lines.length) * 100 : 0}%`,
+                    height: '100%',
+                    backgroundColor: '#16a34a',
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Right Column: Document Workflow Cards */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: 4 }}>
+              <h2 style={{ fontSize: 16, fontWeight: 700, margin: 0 }}>Documents Workflow</h2>
+              {isPending && (
+                <button
+                  type="button"
+                  className="btn-admin-secondary"
+                  onClick={() => setAddModalOpen(true)}
+                  style={{ padding: '4px 10px', fontSize: 11.5 }}
+                >
+                  <Plus size={12} />
+                  <span>Add Line</span>
+                </button>
+              )}
+            </div>
+
+            {displayedLines.map((l) => {
+              const isChina = l.delegationMode === 'open' || l.delegationMode === 'specific' || Boolean(l.assignedAssociateId);
+              return renderCard(l, isChina);
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* ── Modals: Add Line, Delete, Attach, Lock, Reject, Revoke ───────────── */}
       {addModalOpen && (
         <div className="admin-modal-backdrop" onClick={(e) => { if (e.target === e.currentTarget) setAddModalOpen(false); }}>
           <div className="admin-modal-panel" role="dialog" aria-modal="true" style={{ width: 500 }}>
@@ -1555,57 +1697,23 @@ export default function OrderDetailPage() {
                     {catalogDocs.map((doc) => (
                       <option key={doc._id} value={doc._id}>
                         {doc.shortName} {doc.code ? `(${doc.code})` : ''}
-                        {doc.hasTranslation ? ' · with translation' : ''}
                       </option>
                     ))}
                   </select>
                 </div>
 
-                {/* Translation Mode — options depend on the selected document */}
-                {(() => {
-                  const selectedDoc = catalogDocs.find((d) => d._id === selectedAddDocId);
-                  const hasTranslation = selectedDoc?.hasTranslation ?? true;
-
-                  if (!selectedAddDocId) {
-                    return (
-                      <div className="admin-form-group">
-                        <label className="admin-form-label">Translation Mode</label>
-                        <select className="admin-select" disabled>
-                          <option>— Select a document first —</option>
-                        </select>
-                      </div>
-                    );
-                  }
-
-                  if (!hasTranslation) {
-                    return (
-                      <div className="admin-form-group">
-                        <label className="admin-form-label">Translation Mode</label>
-                        <select className="admin-select" value="original_only" disabled>
-                          <option value="original_only">Original Only</option>
-                        </select>
-                        <p style={{ fontSize: 11, color: 'var(--admin-text-muted)', marginTop: 4 }}>
-                          This document does not offer a translation service.
-                        </p>
-                      </div>
-                    );
-                  }
-
-                  return (
-                    <div className="admin-form-group">
-                      <label className="admin-form-label">Translation Mode</label>
-                      <select
-                        className="admin-select"
-                        value={selectedAddMode}
-                        onChange={(e) => setSelectedAddMode(e.target.value)}
-                      >
-                        <option value="original_only">Original Only</option>
-                        <option value="original_plus_translation">Original + Translation</option>
-                        <option value="translation_only">Translation Only</option>
-                      </select>
-                    </div>
-                  );
-                })()}
+                <div className="admin-form-group">
+                  <label className="admin-form-label">Translation Mode</label>
+                  <select
+                    className="admin-select"
+                    value={selectedAddMode}
+                    onChange={(e) => setSelectedAddMode(e.target.value)}
+                  >
+                    <option value="original_only">Original Only</option>
+                    <option value="original_plus_translation">Original + Translation</option>
+                    <option value="translation_only">Translation Only</option>
+                  </select>
+                </div>
               </div>
 
               <div className="admin-modal-footer">
@@ -1621,7 +1729,6 @@ export default function OrderDetailPage() {
         </div>
       )}
 
-      {/* Delete Order Confirmation Modal */}
       {deleteModalOpen && (
         <div className="admin-modal-backdrop" onClick={(e) => { if (e.target === e.currentTarget) setDeleteModalOpen(false); }}>
           <div className="admin-modal-panel" role="dialog" aria-modal="true" style={{ width: 440 }}>
@@ -1631,32 +1738,21 @@ export default function OrderDetailPage() {
                 <X size={16} />
               </button>
             </div>
-
-            <div style={{ padding: '20px 24px', fontSize: 13.5, color: 'var(--admin-text-secondary)', lineHeight: 1.6 }}>
-              Are you sure you want to permanently delete order <strong style={{ color: 'var(--admin-text-primary)' }}>{order.trackingCode}</strong>?
-              <br /><br />
-              <strong style={{ color: 'var(--admin-accent)' }}>Warning:</strong> This is a hard delete and will cascade to delete all {lines.length} document line(s) associated with this order. This action cannot be undone.
+            <div style={{ padding: '20px', fontSize: 13.5, color: '#475569', lineHeight: 1.6 }}>
+              Are you sure you want to permanently delete order <strong>{order.trackingCode}</strong>? This action cannot be undone.
             </div>
-
             <div className="admin-modal-footer">
               <button type="button" className="btn-admin-secondary" onClick={() => setDeleteModalOpen(false)}>
                 Cancel
               </button>
-              <button
-                type="button"
-                className="btn-admin-primary"
-                onClick={handleDeleteOrder}
-                disabled={actionLoading}
-                style={{ backgroundColor: '#dc2626', borderColor: '#dc2626' }}
-              >
-                {actionLoading ? 'Deleting…' : 'Yes, Delete Order'}
+              <button type="button" className="btn-admin-primary" onClick={handleDeleteOrder} disabled={actionLoading} style={{ backgroundColor: '#dc2626', borderColor: '#dc2626' }}>
+                Delete Order
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Admin Attach Modal */}
       {adminAttachLine && (
         <div className="admin-modal-backdrop" onClick={(e) => { if (e.target === e.currentTarget) setAdminAttachLine(null); }}>
           <div className="admin-modal-panel" role="dialog" aria-modal="true" style={{ width: 500 }}>
@@ -1666,56 +1762,27 @@ export default function OrderDetailPage() {
                 <X size={16} />
               </button>
             </div>
-
             <form onSubmit={handleAdminAttachSubmit}>
               <div className="admin-modal-body">
-                <div style={{ fontSize: 13, color: 'var(--admin-text-secondary)', marginBottom: 16 }}>
-                  Attaching file for <strong>{adminAttachLine.documentTypeId?.fullName || 'Document'}</strong>.
-                </div>
-
                 {adminAttachError && (
                   <div className="admin-alert admin-alert-error" style={{ marginBottom: 12 }}>
                     <AlertTriangle size={14} />
                     <span>{adminAttachError}</span>
                   </div>
                 )}
-
                 <div className="admin-form-group">
-                  <label className="admin-form-label">
-                    Select File (Max 12MB) <span className="required">*</span>
-                  </label>
-                  <input
-                    type="file"
-                    className="admin-input"
-                    onChange={(e) => setAdminAttachFile(e.target.files?.[0] || null)}
-                    style={{ padding: '6px' }}
-                    required
-                  />
+                  <label className="admin-form-label">Select File (Max 12MB) <span className="required">*</span></label>
+                  <input type="file" className="admin-input" onChange={(e) => setAdminAttachFile(e.target.files?.[0] || null)} required />
                 </div>
-
                 <div className="admin-form-group">
-                  <label className="admin-form-label">Tracking Code (Optional)</label>
-                  <input
-                    type="text"
-                    className="admin-input"
-                    placeholder="e.g. SF123456789"
-                    value={adminAttachTracking}
-                    onChange={(e) => setAdminAttachTracking(e.target.value)}
-                  />
+                  <label className="admin-form-label">Waybill / Tracking Code (Optional)</label>
+                  <input type="text" className="admin-input" placeholder="e.g. DHL-123" value={adminAttachTracking} onChange={(e) => setAdminAttachTracking(e.target.value)} />
                 </div>
-
                 <div className="admin-form-group">
-                  <label className="admin-form-label">Note / Description (Optional)</label>
-                  <textarea
-                    className="admin-textarea"
-                    rows={2}
-                    placeholder="e.g. Scanned copy received..."
-                    value={adminAttachNote}
-                    onChange={(e) => setAdminAttachNote(e.target.value)}
-                  />
+                  <label className="admin-form-label">Note (Optional)</label>
+                  <textarea className="admin-textarea" rows={2} value={adminAttachNote} onChange={(e) => setAdminAttachNote(e.target.value)} />
                 </div>
               </div>
-
               <div className="admin-modal-footer">
                 <button type="button" className="btn-admin-secondary" onClick={() => setAdminAttachLine(null)}>
                   Cancel
@@ -1729,44 +1796,34 @@ export default function OrderDetailPage() {
         </div>
       )}
 
-      {/* Revoke Assignment Modal */}
       {revokeLine && (
         <div className="admin-modal-backdrop" onClick={(e) => { if (e.target === e.currentTarget) setRevokeLine(null); }}>
           <div className="admin-modal-panel" role="dialog" aria-modal="true" style={{ width: 480 }}>
             <div className="admin-modal-header">
-              <h2 className="admin-modal-title" style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#dc2626' }}>
-                <UserX size={18} />
-                <span>Revoke Assignment & Reopen to Pool</span>
+              <h2 className="admin-modal-title" style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#dc2626' }}>
+                <UserX size={17} />
+                <span>Revoke Assignment & Reopen Pool</span>
               </h2>
               <button type="button" className="btn-admin-icon" onClick={() => setRevokeLine(null)}>
                 <X size={16} />
               </button>
             </div>
-
             <form onSubmit={handleRevokeSubmit}>
               <div className="admin-modal-body">
-                <div style={{ fontSize: 13, color: 'var(--admin-text-secondary)', marginBottom: 14, lineHeight: 1.5 }}>
-                  Revoking <strong>{revokeLine.documentTypeId?.fullName || 'Document'}</strong> from associate{' '}
-                  <strong style={{ color: 'var(--admin-text-primary)' }}>{revokeLine.assignedAssociateId?.name || 'Associate'}</strong>.
-                  <div style={{ marginTop: 8, padding: '10px 12px', borderRadius: 6, backgroundColor: 'rgba(220, 38, 38, 0.08)', border: '1px solid rgba(220, 38, 38, 0.25)', color: '#991b1b', fontSize: 12 }}>
-                    <strong>Permanent Exclusion:</strong> This associate will be added to the exclusion list for this specific document and will NOT be able to claim or be re-assigned it. The document will immediately return to the <strong>Open Claim Pool</strong> for other China associates to claim.
-                  </div>
-                </div>
-
+                <p style={{ fontSize: 13, color: '#475569', marginBottom: 12 }}>
+                  Revoking from <strong>{revokeLine.assignedAssociateId?.name || 'Associate'}</strong> will permanently exclude them from re-claiming this line, and immediately return it to the <strong>Open Claim Pool</strong> for other associates.
+                </p>
                 <div className="admin-form-group">
-                  <label className="admin-form-label">
-                    Revocation Reason <span className="required">*</span>
-                  </label>
+                  <label className="admin-form-label">Revocation Reason <span className="required">*</span></label>
                   <textarea
                     className="admin-textarea"
                     rows={3}
-                    placeholder="e.g. Taking too long to fulfill, associate unresponsive, reassignment requested..."
+                    placeholder="e.g. Unresponsive, reassignment requested..."
                     value={revokeReason}
                     onChange={(e) => setRevokeReason(e.target.value)}
                     required
                   />
                 </div>
-
                 {revokeError && (
                   <div className="admin-alert admin-alert-error" style={{ marginBottom: 10 }}>
                     <AlertTriangle size={14} />
@@ -1774,18 +1831,12 @@ export default function OrderDetailPage() {
                   </div>
                 )}
               </div>
-
               <div className="admin-modal-footer">
                 <button type="button" className="btn-admin-secondary" onClick={() => setRevokeLine(null)} disabled={revokeBusy}>
                   Cancel
                 </button>
-                <button
-                  type="submit"
-                  className="btn-admin-primary"
-                  disabled={revokeBusy || !revokeReason.trim()}
-                  style={{ backgroundColor: '#dc2626', borderColor: '#dc2626' }}
-                >
-                  {revokeBusy ? 'Revoking…' : 'Revoke & Reopen to Pool'}
+                <button type="submit" className="btn-admin-primary" disabled={revokeBusy || !revokeReason.trim()} style={{ backgroundColor: '#dc2626', borderColor: '#dc2626' }}>
+                  {revokeBusy ? 'Revoking…' : 'Revoke & Reopen'}
                 </button>
               </div>
             </form>
@@ -1793,7 +1844,6 @@ export default function OrderDetailPage() {
         </div>
       )}
 
-      {/* Lock Modal (Approve or Reject Attached Line) */}
       {lockLine && (
         <div className="admin-modal-backdrop" onClick={(e) => { if (e.target === e.currentTarget) setLockLine(null); }}>
           <div className="admin-modal-panel" role="dialog" aria-modal="true" style={{ width: 500 }}>
@@ -1805,50 +1855,8 @@ export default function OrderDetailPage() {
                 <X size={16} />
               </button>
             </div>
-
             <form onSubmit={handleLockSubmit}>
               <div className="admin-modal-body">
-                <div style={{ fontSize: 13, color: 'var(--admin-text-secondary)', marginBottom: 16 }}>
-                  Reviewing <strong>{lockLine.documentTypeId?.fullName || 'Document'}</strong>.
-                </div>
-
-                {/* Show uploaded files preview */}
-                {lockLine.uploadedFiles && lockLine.uploadedFiles.length > 0 && (
-                  <div style={{ marginBottom: 16 }}>
-                    <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--admin-text-secondary)', marginBottom: 6, textTransform: 'uppercase' }}>
-                      Attached Files ({lockLine.uploadedFiles.length})
-                    </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                      {lockLine.uploadedFiles.map((f) => (
-                        <div
-                          key={f._id}
-                          style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: 8,
-                            background: 'var(--admin-surface-2, #f8fafc)',
-                            border: '1px solid var(--admin-border)',
-                            borderRadius: 6,
-                            padding: '6px 10px',
-                            fontSize: 12,
-                          }}
-                        >
-                          <FileText size={14} color="var(--admin-accent)" />
-                          <span style={{ flex: 1, fontWeight: 600 }}>{f.filename}</span>
-                          <button
-                            type="button"
-                            onClick={() => handleDownloadFile(f._id, f.filename)}
-                            style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--admin-accent)', display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 11 }}
-                          >
-                            <Download size={13} /> View
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Decision toggle */}
                 <div className="admin-form-group">
                   <label className="admin-form-label">Decision <span className="required">*</span></label>
                   <div style={{ display: 'flex', gap: 8 }}>
@@ -1860,18 +1868,14 @@ export default function OrderDetailPage() {
                         padding: '8px 0',
                         borderRadius: 6,
                         border: `2px solid ${lockApprove ? '#16a34a' : 'var(--admin-border)'}`,
-                        background: lockApprove ? 'rgba(220, 252, 231, 0.5)' : 'transparent',
+                        background: lockApprove ? 'rgba(22,163,74,0.08)' : 'transparent',
                         color: lockApprove ? '#16a34a' : 'var(--admin-text-secondary)',
                         fontWeight: 700,
                         fontSize: 13,
                         cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: 6,
                       }}
                     >
-                      <CheckCircle2 size={14} /> Approve & Lock
+                      ✓ Approve & Lock
                     </button>
                     <button
                       type="button"
@@ -1881,25 +1885,21 @@ export default function OrderDetailPage() {
                         padding: '8px 0',
                         borderRadius: 6,
                         border: `2px solid ${!lockApprove ? '#dc2626' : 'var(--admin-border)'}`,
-                        background: !lockApprove ? 'rgba(254, 242, 242, 0.5)' : 'transparent',
+                        background: !lockApprove ? 'rgba(220,38,38,0.08)' : 'transparent',
                         color: !lockApprove ? '#dc2626' : 'var(--admin-text-secondary)',
                         fontWeight: 700,
                         fontSize: 13,
                         cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: 6,
                       }}
                     >
-                      <X size={14} /> Reject
+                      ✕ Reject & Request Revision
                     </button>
                   </div>
                 </div>
 
                 <div className="admin-form-group">
                   <label className="admin-form-label">
-                    {!lockApprove ? 'Rejection Reason (Required — associate will see this)' : 'Note (Optional)'}
+                    {!lockApprove ? 'Rejection Reason (Required — shown to associate)' : 'Note (Optional)'}
                     {!lockApprove && <span className="required"> *</span>}
                   </label>
                   <textarea
@@ -1911,7 +1911,6 @@ export default function OrderDetailPage() {
                     required={!lockApprove}
                   />
                 </div>
-
                 {lockError && (
                   <div className="admin-alert admin-alert-error" style={{ marginBottom: 4 }}>
                     <AlertTriangle size={14} />
@@ -1919,7 +1918,6 @@ export default function OrderDetailPage() {
                   </div>
                 )}
               </div>
-
               <div className="admin-modal-footer">
                 <button type="button" className="btn-admin-secondary" onClick={() => setLockLine(null)}>
                   Cancel
@@ -1941,33 +1939,25 @@ export default function OrderDetailPage() {
         </div>
       )}
 
-      {/* Reject Correction Modal */}
       {rejectModalOpen && (
-        <div className="admin-modal-overlay">
-          <div className="admin-modal" style={{ maxWidth: 480 }}>
+        <div className="admin-modal-backdrop" onClick={(e) => { if (e.target === e.currentTarget) setRejectModalOpen(false); }}>
+          <div className="admin-modal-panel" role="dialog" aria-modal="true" style={{ width: 480 }}>
             <div className="admin-modal-header">
-              <h3 className="admin-modal-title">Reject Correction Claim</h3>
-              <button
-                type="button"
-                className="admin-modal-close"
-                onClick={() => setRejectModalOpen(false)}
-              >
+              <h2 className="admin-modal-title" style={{ color: '#dc2626' }}>Reject Correction Claim</h2>
+              <button type="button" className="btn-admin-icon" onClick={() => setRejectModalOpen(false)}>
                 <X size={16} />
               </button>
             </div>
             <form onSubmit={handleRejectOrder}>
               <div className="admin-modal-body">
-                <p style={{ fontSize: 13, color: 'var(--admin-text-secondary)', marginBottom: 14 }}>
-                  Rejecting this claim is terminal. The order will be marked as rejected and no further production actions will be permitted.
+                <p style={{ fontSize: 13, color: '#475569', marginBottom: 12 }}>
+                  Rejecting this claim is terminal. The order will be marked as rejected.
                 </p>
                 <div className="admin-form-group">
-                  <label className="admin-form-label">
-                    Rejection Reason <span className="required">*</span>
-                  </label>
+                  <label className="admin-form-label">Rejection Reason <span className="required">*</span></label>
                   <textarea
                     className="admin-textarea"
-                    rows={4}
-                    placeholder="Explain why this correction claim is rejected…"
+                    rows={3}
                     value={rejectReason}
                     onChange={(e) => setRejectReason(e.target.value)}
                     required
@@ -1981,19 +1971,10 @@ export default function OrderDetailPage() {
                 )}
               </div>
               <div className="admin-modal-footer">
-                <button
-                  type="button"
-                  className="btn-admin-secondary"
-                  onClick={() => setRejectModalOpen(false)}
-                >
+                <button type="button" className="btn-admin-secondary" onClick={() => setRejectModalOpen(false)}>
                   Cancel
                 </button>
-                <button
-                  type="submit"
-                  className="btn-admin-primary"
-                  disabled={rejectBusy || !rejectReason.trim()}
-                  style={{ backgroundColor: '#dc2626', borderColor: '#dc2626' }}
-                >
+                <button type="submit" className="btn-admin-primary" disabled={rejectBusy || !rejectReason.trim()} style={{ backgroundColor: '#dc2626', borderColor: '#dc2626' }}>
                   {rejectBusy ? 'Rejecting…' : 'Confirm Rejection'}
                 </button>
               </div>
