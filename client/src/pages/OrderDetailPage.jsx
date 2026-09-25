@@ -22,10 +22,11 @@ import {
   MapPin,
   Lock,
   UserX,
-  Printer,
+  Eye,
   Building2,
   Globe,
-  Sparkles,
+  Users,
+  UserCheck,
 } from 'lucide-react';
 
 const getStatusBadge = (status) => {
@@ -33,66 +34,66 @@ const getStatusBadge = (status) => {
     case 'needed':
       return {
         label: 'Action Needed',
-        icon: <Clock size={12} />,
+        icon: <Clock size={11} />,
         color: '#b45309',
-        bg: '#fef3c7',
-        border: '#fcd34d',
+        bg: '#fffbeb',
+        border: '#fde68a',
       };
     case 'attached':
       return {
-        label: 'Attached — Review Ready',
-        icon: <FileText size={12} />,
+        label: 'In Review',
+        icon: <FileText size={11} />,
         color: '#1d4ed8',
-        bg: '#dbeafe',
+        bg: '#eff6ff',
         border: '#bfdbfe',
       };
     case 'ready':
       return {
-        label: 'Ready / Locked',
-        icon: <CheckCircle2 size={12} />,
+        label: 'Ready',
+        icon: <CheckCircle2 size={11} />,
         color: '#15803d',
-        bg: '#dcfce7',
+        bg: '#f0fdf4',
         border: '#bbf7d0',
       };
     case 'packaged':
       return {
         label: 'Packaged',
-        icon: <Package size={12} />,
+        icon: <Package size={11} />,
         color: '#0e7490',
-        bg: '#cffafe',
+        bg: '#ecfeff',
         border: '#a5f3fc',
       };
     case 'sent_to_client':
       return {
         label: 'Dispatched',
-        icon: <Truck size={12} />,
+        icon: <Truck size={11} />,
         color: '#0369a1',
-        bg: '#e0f2fe',
+        bg: '#f0f9ff',
         border: '#bae6fd',
       };
     case 'delivered':
       return {
         label: 'Delivered',
-        icon: <MapPin size={12} />,
+        icon: <MapPin size={11} />,
         color: '#047857',
-        bg: '#d1fae5',
+        bg: '#ecfdf5',
         border: '#a7f3d0',
       };
     case 'completed':
       return {
         label: 'Completed',
-        icon: <CheckCircle2 size={12} />,
-        color: '#047857',
-        bg: '#d1fae5',
-        border: '#a7f3d0',
+        icon: <CheckCircle2 size={11} />,
+        color: '#15803d',
+        bg: '#f0fdf4',
+        border: '#bbf7d0',
       };
     default:
       return {
-        label: status ? status.replace(/_/g, ' ') : 'Unknown',
-        icon: <Clock size={12} />,
-        color: 'var(--admin-text-secondary)',
-        bg: 'var(--admin-surface-2)',
-        border: 'var(--admin-border)',
+        label: status || 'Unknown',
+        icon: <Clock size={11} />,
+        color: '#64748b',
+        bg: '#f8fafc',
+        border: '#e2e8f0',
       };
   }
 };
@@ -523,7 +524,7 @@ export default function OrderDetailPage() {
   const isExcluded = (line, uId) =>
     (line.excludedAssociateIds || []).some((ex) => (ex._id || ex).toString() === uId.toString());
 
-  // Streamlined Document Card (Clean, calm, un-overwhelming)
+  // Streamlined Document Card (Clean, calm, un-overwhelming, no emojis)
   const renderDocCard = (line, isChinaGroup) => {
     const statusCfg = getStatusBadge(line.status);
     const rejectionNote =
@@ -534,19 +535,21 @@ export default function OrderDetailPage() {
       <div
         key={line._id}
         style={{
-          backgroundColor: 'var(--admin-surface, #ffffff)',
-          border: '1px solid var(--admin-border, #e2e8f0)',
-          borderRadius: 8,
-          padding: '12px 14px',
+          backgroundColor: '#ffffff',
+          border: '1px solid #e2e8f0',
+          borderRadius: 6,
+          padding: '10px 12px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 6,
           boxShadow: '0 1px 2px rgba(0, 0, 0, 0.02)',
-          transition: 'all 0.15s ease',
         }}
       >
-        {/* Card Header: Doc Name, Category, Badges */}
+        {/* Card Header: Doc Name, Code, Status */}
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
-          <div style={{ minWidth: 0 }}>
+          <div style={{ minWidth: 0, flex: 1 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-              <span style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--admin-text-primary)' }}>
+              <span style={{ fontSize: 13, fontWeight: 600, color: '#0f172a' }}>
                 {line.documentTypeId?.fullName || line.documentTypeId?.shortName || 'Document'}
               </span>
               {line.documentTypeId?.code && (
@@ -555,18 +558,21 @@ export default function OrderDetailPage() {
                     fontSize: 10.5,
                     fontFamily: 'monospace',
                     padding: '1px 5px',
-                    borderRadius: 4,
-                    backgroundColor: 'var(--admin-surface-2, #f1f5f9)',
-                    color: 'var(--admin-text-muted)',
+                    borderRadius: 3,
+                    backgroundColor: '#f1f5f9',
+                    color: '#64748b',
                   }}
                 >
                   {line.documentTypeId.code}
                 </span>
               )}
             </div>
-            {line.documentTypeId?.category && (
-              <div style={{ fontSize: 11, color: 'var(--admin-text-muted)', marginTop: 2 }}>
-                {line.documentTypeId.category}
+
+            {line.translationMode && line.translationMode !== 'original_only' && (
+              <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>
+                {line.translationMode === 'original_plus_translation'
+                  ? 'Original + Translation'
+                  : 'Translation Only'}
               </div>
             )}
           </div>
@@ -577,10 +583,10 @@ export default function OrderDetailPage() {
                 display: 'inline-flex',
                 alignItems: 'center',
                 gap: 4,
-                fontSize: 11,
-                fontWeight: 700,
-                padding: '2px 8px',
-                borderRadius: 12,
+                fontSize: 10.5,
+                fontWeight: 600,
+                padding: '2px 7px',
+                borderRadius: 4,
                 backgroundColor: statusCfg.bg,
                 color: statusCfg.color,
                 border: `1px solid ${statusCfg.border}`,
@@ -597,7 +603,7 @@ export default function OrderDetailPage() {
                 title="Remove document line"
                 onClick={() => handleRemoveLine(line._id)}
                 disabled={actionLoading || lines.length <= 1}
-                style={{ padding: 3 }}
+                style={{ padding: 2 }}
               >
                 <Trash2 size={12} />
               </button>
@@ -605,37 +611,32 @@ export default function OrderDetailPage() {
           </div>
         </div>
 
-        {/* China Delegation Status (Compact & Clean) */}
+        {/* China Delegation Status (Quiet single line) */}
         {isChinaGroup && (
           <div
             style={{
-              marginTop: 8,
-              padding: '5px 8px',
-              borderRadius: 6,
-              backgroundColor: '#f8fafc',
-              border: '1px solid #e2e8f0',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
-              gap: 8,
-              fontSize: 11.5,
+              fontSize: 11,
+              padding: '3px 6px',
+              borderRadius: 4,
+              backgroundColor: '#f8fafc',
             }}
           >
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
               {line.delegationMode === 'open' && !line.assignedAssociateId ? (
                 <span style={{ color: '#059669', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                  <Sparkles size={12} color="#059669" />
-                  <span>Open Claim Pool (Unclaimed)</span>
+                  <Users size={12} />
+                  <span>Open Pool (Unclaimed)</span>
                 </span>
               ) : line.assignedAssociateId ? (
-                <span style={{ color: '#1d4ed8', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                <span style={{ color: '#2563eb', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                   <User size={12} />
                   <span>{line.assignedAssociateId.name || 'Associate'}</span>
-                  {line.acknowledgedAt ? (
-                    <span style={{ color: '#16a34a', fontWeight: 500, fontSize: 11 }}>• Confirmed ✓</span>
-                  ) : (
-                    <span style={{ color: '#d97706', fontWeight: 500, fontSize: 11 }}>• Awaiting Ack</span>
-                  )}
+                  <span style={{ color: line.acknowledgedAt ? '#16a34a' : '#d97706', fontWeight: 500 }}>
+                    • {line.acknowledgedAt ? 'Confirmed' : 'Awaiting confirmation'}
+                  </span>
                 </span>
               ) : null}
             </div>
@@ -652,108 +653,84 @@ export default function OrderDetailPage() {
                   border: 'none',
                   background: 'none',
                   color: '#dc2626',
-                  fontSize: 11,
+                  fontSize: 10.5,
                   fontWeight: 600,
                   cursor: 'pointer',
-                  padding: '1px 4px',
-                  borderRadius: 4,
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 3,
+                  padding: '1px 3px',
                 }}
                 title="Revoke associate assignment and reopen to pool"
               >
-                <UserX size={11} />
-                <span>Revoke</span>
+                Revoke
               </button>
             )}
           </div>
         )}
 
-        {/* Audit Note (if revoked) */}
-        {line.revokedAt && (
-          <div
-            style={{
-              marginTop: 6,
-              padding: '3px 8px',
-              borderRadius: 4,
-              backgroundColor: 'rgba(239, 68, 68, 0.05)',
-              fontSize: 11,
-              color: '#991b1b',
-            }}
-          >
-            Reopened by {line.revokedBy?.name || 'Admin'} ("{line.revocationReason}")
-          </div>
-        )}
-
-        {/* Revision / Rejection Note */}
+        {/* Revision Alert (Quiet single-line warning) */}
         {line.status === 'needed' && rejectionNote && (
           <div
             style={{
-              marginTop: 6,
-              padding: '5px 8px',
-              borderRadius: 5,
-              backgroundColor: '#fef2f2',
-              border: '1px solid #fecaca',
-              fontSize: 11.5,
-              color: '#991b1b',
+              padding: '4px 6px',
+              borderRadius: 4,
+              backgroundColor: '#fffbeb',
+              border: '1px solid #fef3c7',
+              fontSize: 11,
+              color: '#b45309',
               display: 'flex',
               alignItems: 'center',
-              gap: 6,
+              gap: 5,
             }}
           >
-            <AlertTriangle size={13} color="#dc2626" style={{ flexShrink: 0 }} />
-            <div>
-              <strong>Note:</strong> {rejectionNote}
-            </div>
+            <AlertTriangle size={12} color="#b45309" style={{ flexShrink: 0 }} />
+            <span><strong>Revision:</strong> {rejectionNote}</span>
           </div>
         )}
 
-        {/* Attached Files (Compact Chips) */}
+        {/* Attached Files (Clean single line chip) */}
         {line.uploadedFiles && line.uploadedFiles.length > 0 && (
-          <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
             {line.uploadedFiles.map((f) => (
               <div
                 key={f._id}
                 style={{
                   display: 'inline-flex',
                   alignItems: 'center',
-                  gap: 6,
-                  padding: '3px 8px',
-                  backgroundColor: 'var(--admin-surface-2, #f8fafc)',
-                  border: '1px solid var(--admin-border, #e2e8f0)',
+                  gap: 5,
+                  padding: '2px 6px',
+                  backgroundColor: '#f8fafc',
+                  border: '1px solid #e2e8f0',
                   borderRadius: 4,
-                  fontSize: 11.5,
+                  fontSize: 11,
                 }}
               >
-                <FileText size={12} color="#0284c7" />
+                <FileText size={11} color="#0284c7" />
                 <span
                   style={{
-                    maxWidth: 160,
+                    maxWidth: 150,
                     overflow: 'hidden',
                     textOverflow: 'ellipsis',
                     whiteSpace: 'nowrap',
                     fontWeight: 500,
-                    color: 'var(--admin-text-primary)',
+                    color: '#0f172a',
                   }}
                 >
                   {f.filename}
                 </span>
-                <span style={{ fontSize: 10.5, color: 'var(--admin-text-muted)' }}>
+                <span style={{ fontSize: 10, color: '#94a3b8' }}>
                   ({Math.round((f.size || 0) / 1024)} KB)
                 </span>
                 <button
                   type="button"
                   onClick={() => handleOpenFile(f._id)}
-                  style={{ border: 'none', background: 'none', cursor: 'pointer', padding: '1px 3px', color: '#0284c7' }}
-                  title="Print or view"
+                  style={{ border: 'none', background: 'none', cursor: 'pointer', padding: '1px 2px', color: '#0284c7' }}
+                  title="View file"
                 >
-                  <Printer size={11} />
+                  <Eye size={11} />
                 </button>
                 <button
                   type="button"
                   onClick={() => handleDownloadFile(f._id, f.filename)}
-                  style={{ border: 'none', background: 'none', cursor: 'pointer', padding: '1px 3px', color: '#64748b' }}
+                  style={{ border: 'none', background: 'none', cursor: 'pointer', padding: '1px 2px', color: '#64748b' }}
                   title="Download file"
                 >
                   <Download size={11} />
@@ -763,42 +740,41 @@ export default function OrderDetailPage() {
           </div>
         )}
 
-        {/* Card Footer: Routing Dropdown & Action Button */}
+        {/* Card Footer: Routing Action on Left, Work Action on Right */}
         <div
           style={{
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
-            marginTop: 10,
-            paddingTop: 8,
-            borderTop: '1px solid var(--admin-border-subtle, #f1f5f9)',
+            paddingTop: 6,
+            borderTop: '1px solid #f1f5f9',
+            gap: 6,
             flexWrap: 'wrap',
-            gap: 8,
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <div>
             {!isChinaGroup ? (
               <button
                 type="button"
                 onClick={() => setDelegateModalLine(line)}
                 disabled={delegateBusy}
                 style={{
-                  padding: '4px 10px',
-                  borderRadius: 5,
-                  border: '1px solid #fed7aa',
-                  backgroundColor: '#fff7ed',
-                  color: '#c2410c',
-                  fontSize: 11.5,
+                  padding: '3px 8px',
+                  borderRadius: 4,
+                  border: '1px solid #cbd5e1',
+                  backgroundColor: '#ffffff',
+                  color: '#334155',
+                  fontSize: 11,
                   fontWeight: 600,
                   display: 'inline-flex',
                   alignItems: 'center',
-                  gap: 5,
+                  gap: 4,
                   cursor: delegateBusy ? 'not-allowed' : 'pointer',
                 }}
-                title="Delegate to China (Open Pool or Associate)"
+                title="Delegate this document to China operations"
               >
-                <Globe size={12} color="#ea580c" />
-                <span>Delegate to China 🇨🇳 →</span>
+                <Globe size={11} color="#475569" />
+                <span>Send to China</span>
               </button>
             ) : (
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -807,22 +783,22 @@ export default function OrderDetailPage() {
                   onClick={() => handleDelegation(line._id, 'none')}
                   disabled={delegateBusy}
                   style={{
-                    padding: '4px 10px',
-                    borderRadius: 5,
-                    border: '1px solid #bae6fd',
-                    backgroundColor: '#f0f9ff',
-                    color: '#0369a1',
-                    fontSize: 11.5,
+                    padding: '3px 8px',
+                    borderRadius: 4,
+                    border: '1px solid #cbd5e1',
+                    backgroundColor: '#ffffff',
+                    color: '#334155',
+                    fontSize: 11,
                     fontWeight: 600,
                     display: 'inline-flex',
                     alignItems: 'center',
-                    gap: 5,
+                    gap: 4,
                     cursor: delegateBusy ? 'not-allowed' : 'pointer',
                   }}
                   title="Move document back to Local Station (Algiers)"
                 >
-                  <Building2 size={12} color="#0284c7" />
-                  <span>← Move to Local 🇩🇿</span>
+                  <Building2 size={11} color="#475569" />
+                  <span>Handle Locally</span>
                 </button>
 
                 <button
@@ -830,13 +806,13 @@ export default function OrderDetailPage() {
                   onClick={() => setDelegateModalLine(line)}
                   disabled={delegateBusy}
                   style={{
-                    padding: '4px 8px',
-                    borderRadius: 5,
-                    border: '1px solid #e2e8f0',
-                    backgroundColor: '#ffffff',
+                    padding: '2px 6px',
+                    border: 'none',
+                    background: 'none',
                     color: '#64748b',
-                    fontSize: 11,
+                    fontSize: 10.5,
                     cursor: delegateBusy ? 'not-allowed' : 'pointer',
+                    textDecoration: 'underline',
                   }}
                   title="Change China associate assignment or reopen to pool"
                 >
@@ -858,9 +834,9 @@ export default function OrderDetailPage() {
                   setAdminAttachNote('');
                   setAdminAttachError('');
                 }}
-                style={{ padding: '4px 12px', fontSize: 11.5, fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 5 }}
+                style={{ padding: '3px 10px', fontSize: 11, fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 4 }}
               >
-                <Paperclip size={13} />
+                <Paperclip size={11} />
                 <span>Attach</span>
               </button>
             )}
@@ -876,24 +852,24 @@ export default function OrderDetailPage() {
                   setLockError('');
                 }}
                 style={{
-                  padding: '4px 12px',
-                  fontSize: 11.5,
-                  fontWeight: 700,
-                  backgroundColor: '#16a34a',
-                  borderColor: '#16a34a',
+                  padding: '3px 10px',
+                  fontSize: 11,
+                  fontWeight: 600,
+                  backgroundColor: '#15803d',
+                  borderColor: '#15803d',
                   display: 'inline-flex',
                   alignItems: 'center',
-                  gap: 5,
+                  gap: 4,
                 }}
               >
-                <Lock size={13} />
+                <Lock size={11} />
                 <span>Review & Lock</span>
               </button>
             )}
 
             {['ready', 'packaged', 'sent_to_client', 'delivered', 'completed'].includes(line.status) && (
-              <span style={{ fontSize: 11.5, fontWeight: 600, color: '#16a34a', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                <CheckCircle2 size={13} />
+              <span style={{ fontSize: 11, fontWeight: 600, color: '#15803d', display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                <CheckCircle2 size={12} />
                 <span>Locked</span>
               </span>
             )}
@@ -1194,23 +1170,27 @@ export default function OrderDetailPage() {
         <div
           style={{
             backgroundColor: 'var(--admin-surface, #ffffff)',
-            borderRadius: 10,
+            borderRadius: 8,
             border: '1px solid var(--admin-border, #e2e8f0)',
             padding: 16,
             boxShadow: '0 1px 3px rgba(0,0,0,0.02)',
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: 10, borderBottom: '2px solid #0284c7', marginBottom: 12 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <Building2 size={16} color="#0284c7" />
-              <h3 style={{ fontSize: 14, fontWeight: 700, margin: 0, color: 'var(--admin-text-primary)' }}>
-                🇩🇿 Local Station (Algiers)
-              </h3>
-              <span style={{ fontSize: 11, fontWeight: 700, padding: '1px 7px', borderRadius: 10, backgroundColor: '#e0f2fe', color: '#0284c7' }}>
-                {localLines.length}
-              </span>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: 10, borderBottom: '1px solid #e2e8f0', marginBottom: 12 }}>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Building2 size={16} color="#0f766e" />
+                <h3 style={{ fontSize: 14, fontWeight: 700, margin: 0, color: '#0f172a' }}>
+                  Local Office (Algiers)
+                </h3>
+                <span style={{ fontSize: 11, fontWeight: 600, padding: '1px 8px', borderRadius: 10, backgroundColor: '#f1f5f9', color: '#475569' }}>
+                  {localLines.length}
+                </span>
+              </div>
+              <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>
+                Documents handled directly at headquarters
+              </div>
             </div>
-            <span style={{ fontSize: 11.5, color: 'var(--admin-text-muted)' }}>Self-Managed</span>
           </div>
 
           {localLines.length === 0 ? (
@@ -1218,7 +1198,7 @@ export default function OrderDetailPage() {
               No documents assigned for local handling.
             </div>
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {localLines.map((l) => renderDocCard(l, false))}
             </div>
           )}
@@ -1228,31 +1208,35 @@ export default function OrderDetailPage() {
         <div
           style={{
             backgroundColor: 'var(--admin-surface, #ffffff)',
-            borderRadius: 10,
+            borderRadius: 8,
             border: '1px solid var(--admin-border, #e2e8f0)',
             padding: 16,
             boxShadow: '0 1px 3px rgba(0,0,0,0.02)',
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: 10, borderBottom: '2px solid #ea580c', marginBottom: 12 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <Globe size={16} color="#ea580c" />
-              <h3 style={{ fontSize: 14, fontWeight: 700, margin: 0, color: '#c2410c' }}>
-                🇨🇳 China Delegation Station
-              </h3>
-              <span style={{ fontSize: 11, fontWeight: 700, padding: '1px 7px', borderRadius: 10, backgroundColor: '#ffedd5', color: '#ea580c' }}>
-                {chinaLines.length}
-              </span>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: 10, borderBottom: '1px solid #e2e8f0', marginBottom: 12 }}>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Globe size={16} color="#2563eb" />
+                <h3 style={{ fontSize: 14, fontWeight: 700, margin: 0, color: '#0f172a' }}>
+                  China Operations
+                </h3>
+                <span style={{ fontSize: 11, fontWeight: 600, padding: '1px 8px', borderRadius: 10, backgroundColor: '#f1f5f9', color: '#475569' }}>
+                  {chinaLines.length}
+                </span>
+              </div>
+              <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>
+                Documents delegated to China associates or open pool
+              </div>
             </div>
-            <span style={{ fontSize: 11.5, color: 'var(--admin-text-muted)' }}>Overseas Sourcing</span>
           </div>
 
           {chinaLines.length === 0 ? (
-            <div style={{ padding: '24px 16px', textAlign: 'center', color: '#94a3b8', fontSize: 12, backgroundColor: '#fff7ed', borderRadius: 6, border: '1px dashed #fed7aa' }}>
+            <div style={{ padding: '24px 16px', textAlign: 'center', color: '#94a3b8', fontSize: 12, backgroundColor: 'var(--admin-surface-2, #f8fafc)', borderRadius: 6, border: '1px dashed #e2e8f0' }}>
               No documents currently delegated to China.
             </div>
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {chinaLines.map((l) => renderDocCard(l, true))}
             </div>
           )}
@@ -1466,9 +1450,14 @@ export default function OrderDetailPage() {
                         fontWeight: 700,
                         fontSize: 13,
                         cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: 6,
                       }}
                     >
-                      ✓ Approve & Lock
+                      <Check size={14} />
+                      <span>Approve & Lock</span>
                     </button>
                     <button
                       type="button"
@@ -1483,9 +1472,14 @@ export default function OrderDetailPage() {
                         fontWeight: 700,
                         fontSize: 13,
                         cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: 6,
                       }}
                     >
-                      ✕ Reject & Request Revision
+                      <X size={14} />
+                      <span>Reject & Request Revision</span>
                     </button>
                   </div>
                 </div>
@@ -1585,14 +1579,32 @@ export default function OrderDetailPage() {
           }}
         >
           <div className="admin-modal-panel" role="dialog" aria-modal="true" style={{ width: 520 }}>
-            <div className="admin-modal-header">
-              <div>
-                <h2 className="admin-modal-title" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <span>🇨🇳 Delegate to China Operations</span>
-                </h2>
-                <div style={{ fontSize: 12, color: 'var(--admin-text-secondary)', marginTop: 2 }}>
-                  {delegateModalLine.documentTypeId?.fullName || 'Customs Document'}
-                  {delegateModalLine.documentTypeId?.code ? ` (${delegateModalLine.documentTypeId.code})` : ''}
+            <div className="admin-modal-header" style={{ padding: '14px 18px', borderBottom: '1px solid #e2e8f0' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div
+                  style={{
+                    width: 32,
+                    height: 32,
+                    borderRadius: 6,
+                    backgroundColor: '#eff6ff',
+                    border: '1px solid #dbeafe',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: '#2563eb',
+                    flexShrink: 0,
+                  }}
+                >
+                  <Globe size={16} />
+                </div>
+                <div>
+                  <h2 className="admin-modal-title" style={{ fontSize: 14, fontWeight: 700, margin: 0, color: '#0f172a' }}>
+                    Route to China Operations
+                  </h2>
+                  <div style={{ fontSize: 11.5, color: '#64748b', marginTop: 1 }}>
+                    {delegateModalLine.documentTypeId?.fullName || delegateModalLine.documentTypeId?.shortName || 'Document'}
+                    {delegateModalLine.documentTypeId?.code ? ` (${delegateModalLine.documentTypeId.code})` : ''}
+                  </div>
                 </div>
               </div>
               <button
@@ -1605,27 +1617,49 @@ export default function OrderDetailPage() {
               </button>
             </div>
 
-            <div className="admin-modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-              {/* Option A: Open Pool */}
+            <div className="admin-modal-body" style={{ padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div style={{ fontSize: 12, color: '#475569' }}>
+                Select how this document will be fulfilled in China:
+              </div>
+
+              {/* Option 1: Open Pool */}
               <div
                 style={{
-                  padding: '14px 16px',
+                  border: '1px solid #cbd5e1',
                   borderRadius: 8,
-                  border: '1.5px solid #a7f3d0',
-                  backgroundColor: '#f0fdf4',
+                  padding: '12px 14px',
+                  backgroundColor: '#f8fafc',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'space-between',
                   gap: 12,
                 }}
               >
-                <div>
-                  <div style={{ fontSize: 13.5, fontWeight: 700, color: '#065f46', display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <Sparkles size={14} color="#059669" />
-                    <span>⚡ Post to Open Claim Pool (Recommended)</span>
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+                  <div
+                    style={{
+                      width: 30,
+                      height: 30,
+                      borderRadius: 6,
+                      backgroundColor: '#ffffff',
+                      border: '1px solid #e2e8f0',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: '#0f766e',
+                      flexShrink: 0,
+                      marginTop: 1,
+                    }}
+                  >
+                    <Users size={15} />
                   </div>
-                  <div style={{ fontSize: 11.5, color: '#047857', marginTop: 3 }}>
-                    Available to all active China associates. The first associate who claims it takes responsibility.
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: '#0f172a' }}>
+                      Open Associate Pool
+                    </div>
+                    <div style={{ fontSize: 11.5, color: '#64748b', marginTop: 2, lineHeight: 1.35 }}>
+                      Shared pool for all China associates. Any available associate can claim and handle it.
+                    </div>
                   </div>
                 </div>
 
@@ -1633,34 +1667,34 @@ export default function OrderDetailPage() {
                   type="button"
                   onClick={() => handleDelegation(delegateModalLine._id, 'open')}
                   disabled={delegateBusy}
+                  className="btn-admin-primary"
                   style={{
                     padding: '6px 14px',
-                    borderRadius: 6,
-                    border: 'none',
-                    backgroundColor: '#059669',
-                    color: '#ffffff',
-                    fontSize: 12,
-                    fontWeight: 700,
-                    cursor: delegateBusy ? 'not-allowed' : 'pointer',
+                    fontSize: 11.5,
+                    fontWeight: 600,
                     whiteSpace: 'nowrap',
+                    flexShrink: 0,
                   }}
                 >
-                  {delegateBusy ? 'Posting…' : 'Post to Pool'}
+                  {delegateBusy ? 'Sending…' : 'Send to Pool'}
                 </button>
               </div>
 
-              {/* Option B: Direct Assignment to an Associate */}
-              <div>
-                <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--admin-text-primary)', marginBottom: 8 }}>
-                  Or Assign Directly to an Associate:
+              {/* Option 2: Direct Assignment to an Associate */}
+              <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: 12 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                  <UserCheck size={14} color="#475569" />
+                  <span style={{ fontSize: 12.5, fontWeight: 700, color: '#0f172a' }}>
+                    Or Assign Directly to an Associate
+                  </span>
                 </div>
 
                 {chinaAssociates.length === 0 ? (
-                  <div style={{ fontSize: 12, color: 'var(--admin-text-muted)', padding: '10px 12px', border: '1px dashed #e2e8f0', borderRadius: 6 }}>
+                  <div style={{ fontSize: 12, color: '#94a3b8', padding: '12px', textAlign: 'center', border: '1px dashed #e2e8f0', borderRadius: 6 }}>
                     No active China associates registered in the system.
                   </div>
                 ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 220, overflowY: 'auto' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 200, overflowY: 'auto' }}>
                     {chinaAssociates.map((u) => {
                       const excluded = isExcluded(delegateModalLine, u._id);
                       const isCurrent =
@@ -1673,26 +1707,43 @@ export default function OrderDetailPage() {
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'space-between',
-                            padding: '8px 12px',
+                            padding: '7px 10px',
                             borderRadius: 6,
                             border: '1px solid #e2e8f0',
-                            backgroundColor: isCurrent ? '#eff6ff' : '#ffffff',
+                            backgroundColor: isCurrent ? '#f0f9ff' : '#ffffff',
                           }}
                         >
-                          <div>
-                            <span style={{ fontSize: 12.5, fontWeight: 600, color: '#0f172a' }}>
-                              🇨🇳 {u.name}
-                            </span>
-                            {u.email && (
-                              <span style={{ fontSize: 11, color: '#64748b', marginLeft: 6 }}>
-                                ({u.email})
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <div
+                              style={{
+                                width: 24,
+                                height: 24,
+                                borderRadius: '50%',
+                                backgroundColor: isCurrent ? '#bae6fd' : '#f1f5f9',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                color: isCurrent ? '#0369a1' : '#64748b',
+                                flexShrink: 0,
+                              }}
+                            >
+                              <User size={12} />
+                            </div>
+                            <div>
+                              <span style={{ fontSize: 12, fontWeight: 600, color: '#0f172a' }}>
+                                {u.name}
                               </span>
-                            )}
-                            {excluded && (
-                              <span style={{ fontSize: 10.5, color: '#dc2626', marginLeft: 6, fontWeight: 600 }}>
-                                (Previously Revoked)
-                              </span>
-                            )}
+                              {u.email && (
+                                <span style={{ fontSize: 11, color: '#64748b', marginLeft: 6 }}>
+                                  ({u.email})
+                                </span>
+                              )}
+                              {excluded && (
+                                <span style={{ fontSize: 10, color: '#dc2626', backgroundColor: '#fef2f2', padding: '1px 5px', borderRadius: 3, marginLeft: 6, fontWeight: 600 }}>
+                                  Previously Revoked
+                                </span>
+                              )}
+                            </div>
                           </div>
 
                           <button
@@ -1700,12 +1751,12 @@ export default function OrderDetailPage() {
                             onClick={() => handleDelegation(delegateModalLine._id, 'specific', u._id)}
                             disabled={delegateBusy || excluded || isCurrent}
                             style={{
-                              padding: '4px 12px',
-                              borderRadius: 5,
+                              padding: '3px 10px',
+                              borderRadius: 4,
                               border: isCurrent ? '1px solid #93c5fd' : '1px solid #cbd5e1',
-                              backgroundColor: isCurrent ? '#dbeafe' : '#ffffff',
-                              color: isCurrent ? '#1d4ed8' : '#334155',
-                              fontSize: 11.5,
+                              backgroundColor: isCurrent ? '#e0f2fe' : '#ffffff',
+                              color: isCurrent ? '#0284c7' : '#334155',
+                              fontSize: 11,
                               fontWeight: 600,
                               cursor: delegateBusy || excluded || isCurrent ? 'not-allowed' : 'pointer',
                             }}
@@ -1720,12 +1771,13 @@ export default function OrderDetailPage() {
               </div>
             </div>
 
-            <div className="admin-modal-footer">
+            <div className="admin-modal-footer" style={{ padding: '10px 18px', borderTop: '1px solid #e2e8f0' }}>
               <button
                 type="button"
                 className="btn-admin-secondary"
                 onClick={() => setDelegateModalLine(null)}
                 disabled={delegateBusy}
+                style={{ fontSize: 11.5, padding: '4px 12px' }}
               >
                 Cancel
               </button>
