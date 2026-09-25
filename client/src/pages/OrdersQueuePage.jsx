@@ -14,8 +14,6 @@ import {
   Package,
   Truck,
   MapPin,
-  Sparkles,
-  LayoutGrid,
 } from 'lucide-react';
 
 const STATUS_TABS = [
@@ -153,75 +151,6 @@ export default function OrdersQueuePage() {
 
   return (
     <div>
-      {/* ── UI CONCEPT EXPLORATION BANNER ──────────────────────────────── */}
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          padding: '12px 18px',
-          borderRadius: 12,
-          marginBottom: 20,
-          background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)',
-          color: '#ffffff',
-          boxShadow: '0 4px 14px rgba(15, 23, 42, 0.12)',
-          border: '1px solid rgba(56, 189, 248, 0.35)',
-          flexWrap: 'wrap',
-          gap: 12,
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <div
-            style={{
-              width: 36,
-              height: 36,
-              borderRadius: 8,
-              backgroundColor: 'rgba(56, 189, 248, 0.15)',
-              border: '1px solid rgba(56, 189, 248, 0.3)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              flexShrink: 0,
-            }}
-          >
-            <Sparkles size={18} color="#38bdf8" />
-          </div>
-          <div>
-            <div style={{ fontSize: 13.5, fontWeight: 700, color: '#f8fafc', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-              <span>Order Detail UI Exploration: 3 New Layouts Ready</span>
-              <span style={{ fontSize: 10, padding: '1px 7px', borderRadius: 10, backgroundColor: '#38bdf8', color: '#0f172a', fontWeight: 800 }}>
-                LIVE PREVIEW
-              </span>
-            </div>
-            <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 2 }}>
-              Compare <strong>1. Clean Split</strong>, <strong>2. Executive Table</strong>, and <strong>3. 2-Col Dashboard</strong>. Test them in the lab or click any order below.
-            </div>
-          </div>
-        </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <Link
-            to="/admin/design-preview"
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 6,
-              padding: '7px 14px',
-              borderRadius: 6,
-              backgroundColor: '#38bdf8',
-              color: '#0f172a',
-              fontSize: 12.5,
-              fontWeight: 700,
-              textDecoration: 'none',
-              boxShadow: '0 2px 6px rgba(56, 189, 248, 0.3)',
-            }}
-          >
-            <LayoutGrid size={14} />
-            <span>Open UI Concept Lab →</span>
-          </Link>
-        </div>
-      </div>
-
       {/* Page Header */}
       <div
         style={{

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import { apiFetch } from '../utils/api';
 import {
   ArrowLeft,
@@ -34,11 +34,6 @@ import {
   Globe,
   Sparkles,
   Ban,
-  LayoutGrid,
-  Table as TableIcon,
-  Columns,
-  SplitSquareVertical,
-  HelpCircle,
 } from 'lucide-react';
 
 const getStatusBadge = (status) => {
@@ -113,39 +108,6 @@ const getStatusBadge = (status) => {
 export default function OrderDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
-
-  // Concept switcher: 'split' | 'table' | 'dashboard'
-  const [searchParams] = useSearchParams();
-  const [activeConcept, setActiveConcept] = useState(() => {
-    return searchParams.get('concept') || localStorage.getItem('autopartdz_order_detail_concept') || 'split';
-  });
-
-  useEffect(() => {
-    const paramConcept = searchParams.get('concept');
-    if (paramConcept && ['split', 'table', 'dashboard'].includes(paramConcept)) {
-      setActiveConcept(paramConcept);
-      localStorage.setItem('autopartdz_order_detail_concept', paramConcept);
-    }
-  }, [searchParams]);
-
-  useEffect(() => {
-    const handleConceptUpdate = (e) => {
-      const c = e.detail || localStorage.getItem('autopartdz_order_detail_concept') || 'split';
-      setActiveConcept(c);
-    };
-    window.addEventListener('conceptChange', handleConceptUpdate);
-    window.addEventListener('storage', handleConceptUpdate);
-    return () => {
-      window.removeEventListener('conceptChange', handleConceptUpdate);
-      window.removeEventListener('storage', handleConceptUpdate);
-    };
-  }, []);
-
-  const handleConceptChange = (concept) => {
-    setActiveConcept(concept);
-    localStorage.setItem('autopartdz_order_detail_concept', concept);
-    window.dispatchEvent(new CustomEvent('conceptChange', { detail: concept }));
-  };
 
   const [order, setOrder] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -641,8 +603,8 @@ export default function OrderDetailPage() {
     );
   };
 
-  // Helper for Document Card (used in Concept 1 and Concept 3)
-  const renderCard = (line, isChinaGroup) => {
+  // Streamlined Document Card (Clean, calm, un-overwhelming)
+  const renderDocCard = (line, isChinaGroup) => {
     const statusCfg = getStatusBadge(line.status);
     const rejectionNote =
       line.lastRejectionNote ||
@@ -652,44 +614,41 @@ export default function OrderDetailPage() {
       <div
         key={line._id}
         style={{
-          backgroundColor: 'var(--admin-surface)',
-          border: '1px solid var(--admin-border)',
-          borderLeft: `4px solid ${
-            line.status === 'needed' ? '#f59e0b' : line.status === 'attached' ? '#2563eb' : '#16a34a'
-          }`,
+          backgroundColor: 'var(--admin-surface, #ffffff)',
+          border: '1px solid var(--admin-border, #e2e8f0)',
           borderRadius: 8,
-          padding: '14px 16px',
-          boxShadow: '0 1px 3px rgba(0, 0, 0, 0.03)',
+          padding: '12px 14px',
+          boxShadow: '0 1px 2px rgba(0, 0, 0, 0.02)',
+          transition: 'all 0.15s ease',
         }}
       >
         {/* Card Header: Doc Name, Category, Badges */}
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-              <span style={{ fontSize: 14.5, fontWeight: 700, color: 'var(--admin-text-primary)' }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--admin-text-primary)' }}>
                 {line.documentTypeId?.fullName || line.documentTypeId?.shortName || 'Document'}
               </span>
               {line.documentTypeId?.code && (
                 <span
                   style={{
-                    fontSize: 11,
-                    fontFamily: 'var(--font-mono)',
-                    padding: '1px 6px',
+                    fontSize: 10.5,
+                    fontFamily: 'monospace',
+                    padding: '1px 5px',
                     borderRadius: 4,
                     backgroundColor: 'var(--admin-surface-2, #f1f5f9)',
-                    border: '1px solid var(--admin-border, #e2e8f0)',
-                    color: 'var(--admin-text-secondary)',
+                    color: 'var(--admin-text-muted)',
                   }}
                 >
                   {line.documentTypeId.code}
                 </span>
               )}
-              {line.documentTypeId?.category && (
-                <span style={{ fontSize: 11, color: 'var(--admin-text-muted)' }}>
-                  • {line.documentTypeId.category}
-                </span>
-              )}
             </div>
+            {line.documentTypeId?.category && (
+              <div style={{ fontSize: 11, color: 'var(--admin-text-muted)', marginTop: 2 }}>
+                {line.documentTypeId.category}
+              </div>
+            )}
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
@@ -698,10 +657,10 @@ export default function OrderDetailPage() {
                 display: 'inline-flex',
                 alignItems: 'center',
                 gap: 4,
-                fontSize: 11.5,
+                fontSize: 11,
                 fontWeight: 700,
-                padding: '3px 8px',
-                borderRadius: 20,
+                padding: '2px 8px',
+                borderRadius: 12,
                 backgroundColor: statusCfg.bg,
                 color: statusCfg.color,
                 border: `1px solid ${statusCfg.border}`,
@@ -718,60 +677,46 @@ export default function OrderDetailPage() {
                 title="Remove document line"
                 onClick={() => handleRemoveLine(line._id)}
                 disabled={actionLoading || lines.length <= 1}
-                style={{ padding: 4 }}
+                style={{ padding: 3 }}
               >
-                <Trash2 size={13} />
+                <Trash2 size={12} />
               </button>
             )}
           </div>
         </div>
 
-        {/* China Delegation Bar (only in China section) */}
+        {/* China Delegation Status (Compact & Clean) */}
         {isChinaGroup && (
           <div
             style={{
               marginTop: 8,
-              padding: '6px 10px',
+              padding: '5px 8px',
               borderRadius: 6,
-              backgroundColor:
-                line.delegationMode === 'open' && !line.assignedAssociateId
-                  ? 'rgba(5, 150, 105, 0.08)'
-                  : 'rgba(37, 99, 235, 0.06)',
-              border: `1px solid ${
-                line.delegationMode === 'open' && !line.assignedAssociateId
-                  ? 'rgba(5, 150, 105, 0.25)'
-                  : 'rgba(37, 99, 235, 0.2)'
-              }`,
+              backgroundColor: '#f8fafc',
+              border: '1px solid #e2e8f0',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
               gap: 8,
-              flexWrap: 'wrap',
               fontSize: 11.5,
             }}
           >
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               {line.delegationMode === 'open' && !line.assignedAssociateId ? (
-                <span style={{ color: '#047857', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                  <Sparkles size={13} color="#059669" />
+                <span style={{ color: '#059669', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                  <Sparkles size={12} color="#059669" />
                   <span>Open Claim Pool (Unclaimed)</span>
                 </span>
               ) : line.assignedAssociateId ? (
-                <>
-                  <span style={{ color: '#1e40af', fontWeight: 600 }}>
-                    Assigned: <strong>{line.assignedAssociateId.name || 'Associate'}</strong>
-                  </span>
-                  <span>•</span>
+                <span style={{ color: '#1d4ed8', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                  <User size={12} />
+                  <span>{line.assignedAssociateId.name || 'Associate'}</span>
                   {line.acknowledgedAt ? (
-                    <span style={{ color: '#16a34a', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 3 }}>
-                      <Check size={12} /> Receipt Confirmed
-                    </span>
+                    <span style={{ color: '#16a34a', fontWeight: 500, fontSize: 11 }}>• Confirmed ✓</span>
                   ) : (
-                    <span style={{ color: '#b45309', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 3 }}>
-                      <Clock size={12} /> Not yet acknowledged
-                    </span>
+                    <span style={{ color: '#d97706', fontWeight: 500, fontSize: 11 }}>• Awaiting Ack</span>
                   )}
-                </>
+                </span>
               ) : null}
             </div>
 
@@ -784,121 +729,121 @@ export default function OrderDetailPage() {
                   setRevokeError('');
                 }}
                 style={{
-                  padding: '3px 8px',
-                  borderRadius: 4,
-                  border: '1px solid #fca5a5',
-                  backgroundColor: '#ffffff',
+                  border: 'none',
+                  background: 'none',
                   color: '#dc2626',
                   fontSize: 11,
                   fontWeight: 600,
+                  cursor: 'pointer',
+                  padding: '1px 4px',
+                  borderRadius: 4,
                   display: 'inline-flex',
                   alignItems: 'center',
                   gap: 3,
-                  cursor: 'pointer',
                 }}
                 title="Revoke associate assignment and reopen to pool"
               >
                 <UserX size={11} />
-                <span>Revoke & Reopen</span>
+                <span>Revoke</span>
               </button>
             )}
           </div>
         )}
 
-        {/* Audit Note: Revocation History */}
+        {/* Audit Note (if revoked) */}
         {line.revokedAt && (
           <div
             style={{
               marginTop: 6,
-              padding: '4px 8px',
+              padding: '3px 8px',
               borderRadius: 4,
               backgroundColor: 'rgba(239, 68, 68, 0.05)',
-              border: '1px solid rgba(239, 68, 68, 0.15)',
               fontSize: 11,
               color: '#991b1b',
             }}
           >
-            <strong>Revocation Audit:</strong> Reopened by {line.revokedBy?.name || 'Admin'} ("{line.revocationReason}")
+            Reopened by {line.revokedBy?.name || 'Admin'} ("{line.revocationReason}")
           </div>
         )}
 
-        {/* Rejection Note Callout */}
+        {/* Revision / Rejection Note */}
         {line.status === 'needed' && rejectionNote && (
           <div
             style={{
-              marginTop: 8,
-              padding: '8px 10px',
-              borderRadius: 6,
-              backgroundColor: 'rgba(220, 38, 38, 0.08)',
-              border: '1px solid rgba(220, 38, 38, 0.25)',
-              fontSize: 12,
+              marginTop: 6,
+              padding: '5px 8px',
+              borderRadius: 5,
+              backgroundColor: '#fef2f2',
+              border: '1px solid #fecaca',
+              fontSize: 11.5,
               color: '#991b1b',
               display: 'flex',
-              alignItems: 'flex-start',
-              gap: 8,
+              alignItems: 'center',
+              gap: 6,
             }}
           >
-            <AlertTriangle size={14} color="#dc2626" style={{ flexShrink: 0, marginTop: 1 }} />
+            <AlertTriangle size={13} color="#dc2626" style={{ flexShrink: 0 }} />
             <div>
-              <strong>Revision Note:</strong> {rejectionNote}
+              <strong>Note:</strong> {rejectionNote}
             </div>
           </div>
         )}
 
-        {/* Attached Files Strip */}
+        {/* Attached Files (Compact Chips) */}
         {line.uploadedFiles && line.uploadedFiles.length > 0 && (
-          <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
             {line.uploadedFiles.map((f) => (
               <div
                 key={f._id}
                 style={{
-                  display: 'flex',
+                  display: 'inline-flex',
                   alignItems: 'center',
-                  justifyContent: 'space-between',
-                  padding: '6px 10px',
+                  gap: 6,
+                  padding: '3px 8px',
                   backgroundColor: 'var(--admin-surface-2, #f8fafc)',
                   border: '1px solid var(--admin-border, #e2e8f0)',
-                  borderRadius: 6,
-                  fontSize: 12,
+                  borderRadius: 4,
+                  fontSize: 11.5,
                 }}
               >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
-                  <FileText size={14} color="var(--admin-accent)" />
-                  <span style={{ fontWeight: 600, color: 'var(--admin-text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {f.filename}
-                  </span>
-                  <span style={{ fontSize: 11, color: 'var(--admin-text-muted)' }}>
-                    ({Math.round((f.size || 0) / 1024)} KB)
-                  </span>
-                </div>
-
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <button
-                    type="button"
-                    className="btn-admin-primary"
-                    onClick={() => handleOpenFile(f._id)}
-                    style={{ padding: '4px 8px', fontSize: 11, display: 'inline-flex', alignItems: 'center', gap: 4 }}
-                    title="Print or view"
-                  >
-                    <Printer size={12} />
-                    <span>Print</span>
-                  </button>
-                  <button
-                    type="button"
-                    className="btn-admin-secondary"
-                    onClick={() => handleDownloadFile(f._id, f.filename)}
-                    style={{ padding: '4px 8px', fontSize: 11, display: 'inline-flex', alignItems: 'center', gap: 4 }}
-                    title="Download file"
-                  >
-                    <Download size={12} />
-                  </button>
-                </div>
+                <FileText size={12} color="#0284c7" />
+                <span
+                  style={{
+                    maxWidth: 160,
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                    fontWeight: 500,
+                    color: 'var(--admin-text-primary)',
+                  }}
+                >
+                  {f.filename}
+                </span>
+                <span style={{ fontSize: 10.5, color: 'var(--admin-text-muted)' }}>
+                  ({Math.round((f.size || 0) / 1024)} KB)
+                </span>
+                <button
+                  type="button"
+                  onClick={() => handleOpenFile(f._id)}
+                  style={{ border: 'none', background: 'none', cursor: 'pointer', padding: '1px 3px', color: '#0284c7' }}
+                  title="Print or view"
+                >
+                  <Printer size={11} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleDownloadFile(f._id, f.filename)}
+                  style={{ border: 'none', background: 'none', cursor: 'pointer', padding: '1px 3px', color: '#64748b' }}
+                  title="Download file"
+                >
+                  <Download size={11} />
+                </button>
               </div>
             ))}
           </div>
         )}
 
-        {/* Action Controls & Delegation Footer */}
+        {/* Card Footer: Routing Dropdown & Action Button */}
         <div
           style={{
             display: 'flex',
@@ -912,11 +857,8 @@ export default function OrderDetailPage() {
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span style={{ fontSize: 11, color: 'var(--admin-text-secondary)', display: 'inline-flex', alignItems: 'center', gap: 3 }}>
-              <UserCheck size={12} />
-              <span>Delegation:</span>
-            </span>
-            {renderDelegationSelect(line)}
+            <span style={{ fontSize: 11, color: 'var(--admin-text-muted)' }}>Route:</span>
+            {renderDelegationSelect(line, true)}
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -931,9 +873,9 @@ export default function OrderDetailPage() {
                   setAdminAttachNote('');
                   setAdminAttachError('');
                 }}
-                style={{ padding: '6px 14px', fontSize: 12, fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                style={{ padding: '4px 12px', fontSize: 11.5, fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 5 }}
               >
-                <Paperclip size={14} />
+                <Paperclip size={13} />
                 <span>Attach</span>
               </button>
             )}
@@ -948,9 +890,18 @@ export default function OrderDetailPage() {
                   setLockNote('');
                   setLockError('');
                 }}
-                style={{ padding: '6px 14px', fontSize: 12, fontWeight: 700, backgroundColor: '#16a34a', borderColor: '#16a34a', display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                style={{
+                  padding: '4px 12px',
+                  fontSize: 11.5,
+                  fontWeight: 700,
+                  backgroundColor: '#16a34a',
+                  borderColor: '#16a34a',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 5,
+                }}
               >
-                <Lock size={14} />
+                <Lock size={13} />
                 <span>Review & Lock</span>
               </button>
             )}
@@ -969,120 +920,6 @@ export default function OrderDetailPage() {
 
   return (
     <div>
-      {/* ── LIVE CONCEPT EXPLORATION SWITCHER (Requested by User) ───────────── */}
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          padding: '10px 14px',
-          backgroundColor: '#0f172a',
-          borderRadius: 8,
-          marginBottom: 16,
-          color: '#ffffff',
-          boxShadow: '0 2px 8px rgba(15, 23, 42, 0.15)',
-          flexWrap: 'wrap',
-          gap: 10,
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <LayoutGrid size={16} color="#38bdf8" />
-          <div>
-            <div style={{ fontSize: 13, fontWeight: 700, color: '#f8fafc' }}>
-              Concept Switcher (Exploration Mode)
-            </div>
-            <div style={{ fontSize: 11, color: '#94a3b8' }}>
-              Switch between the 3 UI designs live on this order to select your preferred layout
-            </div>
-          </div>
-        </div>
-
-        <div style={{ display: 'flex', gap: 6, backgroundColor: '#1e293b', padding: 3, borderRadius: 6 }}>
-          <button
-            type="button"
-            onClick={() => handleConceptChange('split')}
-            style={{
-              padding: '6px 12px',
-              borderRadius: 4,
-              border: 'none',
-              backgroundColor: activeConcept === 'split' ? '#38bdf8' : 'transparent',
-              color: activeConcept === 'split' ? '#0f172a' : '#94a3b8',
-              fontSize: 12,
-              fontWeight: 700,
-              cursor: 'pointer',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 5,
-            }}
-          >
-            <SplitSquareVertical size={13} />
-            <span>1. Clean Split</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => handleConceptChange('table')}
-            style={{
-              padding: '6px 12px',
-              borderRadius: 4,
-              border: 'none',
-              backgroundColor: activeConcept === 'table' ? '#38bdf8' : 'transparent',
-              color: activeConcept === 'table' ? '#0f172a' : '#94a3b8',
-              fontSize: 12,
-              fontWeight: 700,
-              cursor: 'pointer',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 5,
-            }}
-          >
-            <TableIcon size={13} />
-            <span>2. Executive Table</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => handleConceptChange('dashboard')}
-            style={{
-              padding: '6px 12px',
-              borderRadius: 4,
-              border: 'none',
-              backgroundColor: activeConcept === 'dashboard' ? '#38bdf8' : 'transparent',
-              color: activeConcept === 'dashboard' ? '#0f172a' : '#94a3b8',
-              fontSize: 12,
-              fontWeight: 700,
-              cursor: 'pointer',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 5,
-            }}
-          >
-            <Columns size={13} />
-            <span>3. 2-Col Dashboard</span>
-          </button>
-
-          <Link
-            to="/admin/design-preview"
-            style={{
-              padding: '6px 12px',
-              borderRadius: 4,
-              backgroundColor: 'rgba(56, 189, 248, 0.15)',
-              color: '#38bdf8',
-              fontSize: 12,
-              fontWeight: 700,
-              textDecoration: 'none',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 5,
-              border: '1px solid rgba(56, 189, 248, 0.35)',
-            }}
-            title="Open side-by-side comparison lab"
-          >
-            <Sparkles size={13} />
-            <span>Design Lab →</span>
-          </Link>
-        </div>
-      </div>
 
       {/* ── Top Header & Global Actions ──────────────────────────────────────── */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, flexWrap: 'wrap', gap: 10 }}>
@@ -1191,524 +1028,215 @@ export default function OrderDetailPage() {
         </div>
       </div>
 
-      {/* ═══════════════════════════════════════════════════════════════════════ */}
-      {/* CONCEPT 1: CLEAN MODERN SPLIT (Local vs China Sections)                 */}
-      {/* ═══════════════════════════════════════════════════════════════════════ */}
-      {activeConcept === 'split' && (
-        <div>
-          {/* Client & Vehicle Summary Cards */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 14, marginBottom: 18 }}>
-            <div className="admin-card" style={{ padding: 14 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10, borderBottom: '1px solid var(--admin-border)', paddingBottom: 6 }}>
-                <User size={15} color="var(--admin-accent)" />
-                <h2 style={{ fontSize: 13, fontWeight: 700, color: 'var(--admin-text-primary)', margin: 0 }}>
-                  Client Profile
-                </h2>
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '100px 1fr', gap: '6px 10px', fontSize: 12.5 }}>
-                <span style={{ color: 'var(--admin-text-secondary)' }}>Full Name:</span>
-                <span style={{ fontWeight: 600 }}>{order.firstName} {order.lastName}</span>
-                <span style={{ color: 'var(--admin-text-secondary)' }}>Phone:</span>
-                <span style={{ fontFamily: 'monospace' }}>{order.phone}</span>
-                <span style={{ color: 'var(--admin-text-secondary)' }}>Passport:</span>
-                <span style={{ fontFamily: 'monospace' }}>{order.passportNumber || '—'}</span>
-                <span style={{ color: 'var(--admin-text-secondary)' }}>Address:</span>
-                <span>{order.address}, {order.wilaya}</span>
-              </div>
-            </div>
-
-            <div className="admin-card" style={{ padding: 14 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10, borderBottom: '1px solid var(--admin-border)', paddingBottom: 6 }}>
-                <Car size={15} color="var(--admin-accent)" />
-                <h2 style={{ fontSize: 13, fontWeight: 700, color: 'var(--admin-text-primary)', margin: 0 }}>
-                  Vehicle Specifications
-                </h2>
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '100px 1fr', gap: '6px 10px', fontSize: 12.5 }}>
-                <span style={{ color: 'var(--admin-text-secondary)' }}>VIN:</span>
-                <span style={{ fontFamily: 'monospace', fontWeight: 700, color: 'var(--admin-accent)' }}>{order.vin}</span>
-                <span style={{ color: 'var(--admin-text-secondary)' }}>Model:</span>
-                <span>{order.carModel || '—'}</span>
-                <span style={{ color: 'var(--admin-text-secondary)' }}>Category:</span>
-                <span>{order.carCategoryId?.name || 'Custom'}</span>
-                <span style={{ color: 'var(--admin-text-secondary)' }}>Forwarder:</span>
-                <span>{order.importAgency || '—'}</span>
-              </div>
-            </div>
+      {/* ── Compact Order Dossier Summary Ribbon ────────────────────────────── */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: '10px 16px',
+          backgroundColor: 'var(--admin-surface, #ffffff)',
+          borderRadius: 8,
+          border: '1px solid var(--admin-border, #e2e8f0)',
+          marginBottom: 16,
+          boxShadow: '0 1px 3px rgba(0,0,0,0.02)',
+          flexWrap: 'wrap',
+          gap: 12,
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap', fontSize: 12.5 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <User size={14} color="#0284c7" />
+            <span style={{ fontWeight: 700, color: 'var(--admin-text-primary)' }}>
+              {clientDisplayName}
+            </span>
+            {order.phone && <span style={{ color: 'var(--admin-text-muted)' }}>({order.phone})</span>}
           </div>
 
-          {/* Dossier Header with Filter Tabs */}
-          <div className="admin-card" style={{ padding: 0, overflow: 'hidden' }}>
-            <div
-              style={{
-                padding: '12px 18px',
-                borderBottom: '1px solid var(--admin-border)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                flexWrap: 'wrap',
-                gap: 10,
-                backgroundColor: 'var(--admin-surface)',
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <h2 style={{ fontSize: 15, fontWeight: 700, color: 'var(--admin-text-primary)', margin: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <FileText size={16} color="var(--admin-accent)" />
-                  <span>Document Dossier ({lines.length})</span>
-                </h2>
-
-                <div style={{ display: 'flex', gap: 2, backgroundColor: 'var(--admin-surface-2, #f1f5f9)', padding: 2, borderRadius: 6 }}>
-                  <button
-                    type="button"
-                    onClick={() => setFilterTab('all')}
-                    style={{
-                      padding: '3px 8px',
-                      fontSize: 11.5,
-                      fontWeight: filterTab === 'all' ? 700 : 500,
-                      border: 'none',
-                      borderRadius: 4,
-                      backgroundColor: filterTab === 'all' ? '#ffffff' : 'transparent',
-                      color: filterTab === 'all' ? '#0f172a' : '#64748b',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    All ({lines.length})
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setFilterTab('action_needed')}
-                    style={{
-                      padding: '3px 8px',
-                      fontSize: 11.5,
-                      fontWeight: filterTab === 'action_needed' ? 700 : 500,
-                      border: 'none',
-                      borderRadius: 4,
-                      backgroundColor: filterTab === 'action_needed' ? '#ffffff' : 'transparent',
-                      color: filterTab === 'action_needed' ? '#b45309' : '#64748b',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    Action Needed ({actionNeededCount})
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setFilterTab('ready')}
-                    style={{
-                      padding: '3px 8px',
-                      fontSize: 11.5,
-                      fontWeight: filterTab === 'ready' ? 700 : 500,
-                      border: 'none',
-                      borderRadius: 4,
-                      backgroundColor: filterTab === 'ready' ? '#ffffff' : 'transparent',
-                      color: filterTab === 'ready' ? '#15803d' : '#64748b',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    Ready ({readyCount})
-                  </button>
-                </div>
-              </div>
-
-              {isPending && (
-                <button
-                  type="button"
-                  className="btn-admin-secondary"
-                  onClick={() => setAddModalOpen(true)}
-                  style={{ padding: '5px 12px', fontSize: 12 }}
-                >
-                  <Plus size={13} />
-                  <span>Add Line</span>
-                </button>
-              )}
+          {order.passportNumber && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4, color: 'var(--admin-text-secondary)' }}>
+              <span>Passport:</span>
+              <span style={{ fontFamily: 'monospace', fontWeight: 600, color: 'var(--admin-text-primary)' }}>
+                {order.passportNumber}
+              </span>
             </div>
+          )}
 
-            {/* Split Groups List */}
-            <div style={{ padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 20 }}>
-              {/* Group 1: Local Station */}
-              <div>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10, paddingBottom: 6, borderBottom: '2px solid var(--admin-border)' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <Building2 size={15} color="var(--admin-accent)" />
-                    <h3 style={{ fontSize: 13.5, fontWeight: 700, margin: 0, color: 'var(--admin-text-primary)' }}>
-                      Local Headquarters Station
-                    </h3>
-                    <span style={{ fontSize: 11, fontWeight: 700, padding: '1px 6px', borderRadius: 10, backgroundColor: '#f1f5f9', color: '#475569' }}>
-                      {localLines.length}
-                    </span>
-                  </div>
-                  <span style={{ fontSize: 11.5, color: '#64748b' }}>Managed directly without China delegation</span>
-                </div>
-
-                {localLines.length === 0 ? (
-                  <div style={{ padding: '12px', textAlign: 'center', color: '#94a3b8', fontSize: 12, backgroundColor: '#f8fafc', borderRadius: 6, border: '1px dashed #e2e8f0' }}>
-                    No documents marked for local handling.
-                  </div>
-                ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                    {localLines.map((l) => renderCard(l, false))}
-                  </div>
-                )}
-              </div>
-
-              {/* Group 2: China Station */}
-              <div>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10, paddingBottom: 6, borderBottom: '2px solid #93c5fd' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <Globe size={15} color="#2563eb" />
-                    <h3 style={{ fontSize: 13.5, fontWeight: 700, margin: 0, color: '#1e40af' }}>
-                      Delegated to China Operations
-                    </h3>
-                    <span style={{ fontSize: 11, fontWeight: 700, padding: '1px 6px', borderRadius: 10, backgroundColor: '#dbeafe', color: '#1d4ed8' }}>
-                      {chinaLines.length}
-                    </span>
-                  </div>
-                  <span style={{ fontSize: 11.5, color: '#64748b' }}>Assigned or in Open Claim Pool</span>
-                </div>
-
-                {chinaLines.length === 0 ? (
-                  <div style={{ padding: '12px', textAlign: 'center', color: '#94a3b8', fontSize: 12, backgroundColor: '#eff6ff', borderRadius: 6, border: '1px dashed #bfdbfe' }}>
-                    No documents currently delegated to China.
-                  </div>
-                ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                    {chinaLines.map((l) => renderCard(l, true))}
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ═══════════════════════════════════════════════════════════════════════ */}
-      {/* CONCEPT 2: EXECUTIVE DATA TABLE (High Density Enterprise Table)         */}
-      {/* ═══════════════════════════════════════════════════════════════════════ */}
-      {activeConcept === 'table' && (
-        <div>
-          {/* Compact Dossier Header Ribbon */}
-          <div
-            style={{
-              padding: '10px 14px',
-              backgroundColor: '#ffffff',
-              borderRadius: 8,
-              border: '1px solid #e2e8f0',
-              marginBottom: 14,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              flexWrap: 'wrap',
-              gap: 12,
-              fontSize: 12.5,
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <User size={15} color="var(--admin-accent)" />
-              <strong>{order.firstName} {order.lastName}</strong>
-              <span style={{ color: '#64748b' }}>({order.phone})</span>
-              <span>•</span>
-              <span style={{ color: '#64748b' }}>Passport: <strong style={{ color: '#0f172a' }}>{order.passportNumber || '—'}</strong></span>
-            </div>
-
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <Car size={15} color="#2563eb" />
-              <span>{order.carModel}</span>
-              <span>•</span>
-              <span style={{ fontFamily: 'monospace', fontWeight: 700, color: 'var(--admin-accent)' }}>VIN: {order.vin}</span>
-            </div>
-
-            {isPending && (
-              <button
-                type="button"
-                className="btn-admin-secondary"
-                onClick={() => setAddModalOpen(true)}
-                style={{ padding: '4px 10px', fontSize: 11.5 }}
-              >
-                <Plus size={12} />
-                <span>Add Document</span>
-              </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <Car size={14} color="#0284c7" />
+            <span style={{ fontWeight: 600, color: 'var(--admin-text-primary)' }}>
+              {order.carBrand} {order.carModel}
+            </span>
+            {order.vin && (
+              <span style={{ fontFamily: 'monospace', color: '#0284c7', fontSize: 11.5 }}>
+                VIN: {order.vin}
+              </span>
             )}
           </div>
 
-          {/* High-Density Data Table */}
-          <div className="admin-card" style={{ padding: 0, overflow: 'hidden' }}>
-            <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: 12.5 }}>
-                <thead>
-                  <tr style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0', color: '#475569', fontWeight: 700 }}>
-                    <th style={{ padding: '10px 14px' }}>Document Name & Code</th>
-                    <th style={{ padding: '10px 14px' }}>Fulfillment Station & Assignee</th>
-                    <th style={{ padding: '10px 14px' }}>Status</th>
-                    <th style={{ padding: '10px 14px' }}>Attached Files</th>
-                    <th style={{ padding: '10px 14px', textAlign: 'right' }}>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {displayedLines.length === 0 ? (
-                    <tr>
-                      <td colSpan={5} style={{ padding: '24px', textAlign: 'center', color: '#94a3b8' }}>
-                        No document lines found.
-                      </td>
-                    </tr>
-                  ) : (
-                    displayedLines.map((line) => {
-                      const statusCfg = getStatusBadge(line.status);
-                      const isChina = line.delegationMode === 'open' || line.delegationMode === 'specific' || Boolean(line.assignedAssociateId);
-
-                      return (
-                        <tr key={line._id} style={{ borderBottom: '1px solid #f1f5f9', verticalAlign: 'middle' }}>
-                          {/* Document Name */}
-                          <td style={{ padding: '10px 14px' }}>
-                            <div style={{ fontWeight: 700, color: '#0f172a' }}>
-                              {line.documentTypeId?.fullName || line.documentTypeId?.shortName}
-                            </div>
-                            <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>
-                              {line.documentTypeId?.code && <span style={{ fontFamily: 'monospace' }}>[{line.documentTypeId.code}] </span>}
-                              {line.translationMode === 'original_plus_translation' ? 'Orig + Translation' : 'Original Only'}
-                            </div>
-                            {line.lastRejectionNote && line.status === 'needed' && (
-                              <div style={{ fontSize: 11, color: '#dc2626', marginTop: 2 }}>
-                                ⚠️ Rejected: {line.lastRejectionNote}
-                              </div>
-                            )}
-                          </td>
-
-                          {/* Station & Delegation Dropdown */}
-                          <td style={{ padding: '10px 14px' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                              {renderDelegationSelect(line, true)}
-                              {isChina && line.assignedAssociateId && (
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setRevokeLine(line);
-                                    setRevokeReason('');
-                                    setRevokeError('');
-                                  }}
-                                  style={{
-                                    border: 'none',
-                                    background: 'transparent',
-                                    color: '#dc2626',
-                                    cursor: 'pointer',
-                                    padding: 2,
-                                  }}
-                                  title="Revoke associate assignment"
-                                >
-                                  <UserX size={13} />
-                                </button>
-                              )}
-                            </div>
-                            {isChina && (
-                              <div style={{ fontSize: 11, marginTop: 2 }}>
-                                {line.delegationMode === 'open' && !line.assignedAssociateId ? (
-                                  <span style={{ color: '#047857', fontWeight: 600 }}>⚡ Open Claim Pool</span>
-                                ) : line.acknowledgedAt ? (
-                                  <span style={{ color: '#16a34a' }}>✓ Confirmed Receipt</span>
-                                ) : (
-                                  <span style={{ color: '#b45309' }}>⏳ Unacknowledged</span>
-                                )}
-                              </div>
-                            )}
-                          </td>
-
-                          {/* Status Pill */}
-                          <td style={{ padding: '10px 14px' }}>
-                            <span
-                              style={{
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: 4,
-                                fontSize: 11,
-                                fontWeight: 700,
-                                padding: '2px 8px',
-                                borderRadius: 12,
-                                backgroundColor: statusCfg.bg,
-                                color: statusCfg.color,
-                                border: `1px solid ${statusCfg.border}`,
-                              }}
-                            >
-                              {statusCfg.icon}
-                              <span>{statusCfg.label}</span>
-                            </span>
-                          </td>
-
-                          {/* Files */}
-                          <td style={{ padding: '10px 14px' }}>
-                            {line.uploadedFiles && line.uploadedFiles.length > 0 ? (
-                              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                                <button
-                                  type="button"
-                                  onClick={() => handleOpenFile(line.uploadedFiles[0]._id)}
-                                  style={{
-                                    border: 'none',
-                                    background: 'transparent',
-                                    color: '#1e40af',
-                                    cursor: 'pointer',
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                    gap: 3,
-                                    fontSize: 11.5,
-                                    fontWeight: 600,
-                                  }}
-                                  title="Print or view"
-                                >
-                                  <Printer size={12} />
-                                  <span>View</span>
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => handleDownloadFile(line.uploadedFiles[0]._id, line.uploadedFiles[0].filename)}
-                                  style={{
-                                    border: 'none',
-                                    background: 'transparent',
-                                    color: '#64748b',
-                                    cursor: 'pointer',
-                                    padding: 2,
-                                  }}
-                                  title="Download file"
-                                >
-                                  <Download size={12} />
-                                </button>
-                              </div>
-                            ) : (
-                              <span style={{ color: '#94a3b8', fontSize: 11 }}>No files</span>
-                            )}
-                          </td>
-
-                          {/* Actions */}
-                          <td style={{ padding: '10px 14px', textAlign: 'right' }}>
-                            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                              {line.status === 'needed' && (
-                                <button
-                                  type="button"
-                                  className="btn-admin-primary"
-                                  onClick={() => {
-                                    setAdminAttachLine(line);
-                                    setAdminAttachFile(null);
-                                    setAdminAttachTracking(line.trackingCode || '');
-                                    setAdminAttachNote('');
-                                    setAdminAttachError('');
-                                  }}
-                                  style={{ padding: '4px 10px', fontSize: 11.5 }}
-                                >
-                                  <Paperclip size={12} />
-                                  <span>Attach</span>
-                                </button>
-                              )}
-
-                              {line.status === 'attached' && (
-                                <button
-                                  type="button"
-                                  className="btn-admin-primary"
-                                  onClick={() => {
-                                    setLockLine(line);
-                                    setLockApprove(true);
-                                    setLockNote('');
-                                    setLockError('');
-                                  }}
-                                  style={{ padding: '4px 10px', fontSize: 11.5, backgroundColor: '#16a34a', borderColor: '#16a34a' }}
-                                >
-                                  <Lock size={12} />
-                                  <span>Lock</span>
-                                </button>
-                              )}
-
-                              {isPending && (
-                                <button
-                                  type="button"
-                                  className="btn-admin-icon danger"
-                                  onClick={() => handleRemoveLine(line._id)}
-                                  disabled={actionLoading || lines.length <= 1}
-                                  style={{ padding: 3 }}
-                                >
-                                  <Trash2 size={13} />
-                                </button>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })
-                  )}
-                </tbody>
-              </table>
+          {(order.address || order.wilaya) && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4, color: 'var(--admin-text-muted)', fontSize: 12 }}>
+              <MapPin size={13} />
+              <span>{order.address ? `${order.address}, ` : ''}{order.wilaya}</span>
             </div>
-          </div>
+          )}
         </div>
-      )}
 
-      {/* ═══════════════════════════════════════════════════════════════════════ */}
-      {/* CONCEPT 3: TWO-COLUMN DASHBOARD (Command Center Layout)                */}
-      {/* ═══════════════════════════════════════════════════════════════════════ */}
-      {activeConcept === 'dashboard' && (
-        <div style={{ display: 'grid', gridTemplateColumns: '320px 1fr', gap: 16, alignItems: 'start' }}>
-          {/* Left Column: Fixed Executive Profile */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <div className="admin-card" style={{ padding: 14 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10, borderBottom: '1px solid #e2e8f0', paddingBottom: 6 }}>
-                <User size={15} color="var(--admin-accent)" />
-                <h3 style={{ fontSize: 13, fontWeight: 700, margin: 0 }}>Client Dossier</h3>
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 12 }}>
-                <div><span style={{ color: '#64748b' }}>Name:</span> <strong>{order.firstName} {order.lastName}</strong></div>
-                <div><span style={{ color: '#64748b' }}>Phone:</span> <span style={{ fontFamily: 'monospace' }}>{order.phone}</span></div>
-                <div><span style={{ color: '#64748b' }}>Passport:</span> <span style={{ fontFamily: 'monospace' }}>{order.passportNumber || '—'}</span></div>
-                <div><span style={{ color: '#64748b' }}>Address:</span> {order.address}, {order.wilaya}</div>
-              </div>
-            </div>
-
-            <div className="admin-card" style={{ padding: 14 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10, borderBottom: '1px solid #e2e8f0', paddingBottom: 6 }}>
-                <Car size={15} color="#2563eb" />
-                <h3 style={{ fontSize: 13, fontWeight: 700, margin: 0 }}>Vehicle Specs</h3>
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 12 }}>
-                <div><span style={{ color: '#64748b' }}>VIN:</span> <strong style={{ color: 'var(--admin-accent)', fontFamily: 'monospace' }}>{order.vin}</strong></div>
-                <div><span style={{ color: '#64748b' }}>Model:</span> {order.carModel || '—'}</div>
-                <div><span style={{ color: '#64748b' }}>Category:</span> {order.carCategoryId?.name || 'Custom'}</div>
-              </div>
-            </div>
-
-            <div className="admin-card" style={{ padding: 14, backgroundColor: '#f8fafc' }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: '#475569', marginBottom: 6 }}>Order Progress</div>
-              <div style={{ fontSize: 13, fontWeight: 700, color: '#0f172a' }}>
-                {readyCount} of {lines.length} Documents Ready
-              </div>
-              <div style={{ width: '100%', height: 6, backgroundColor: '#e2e8f0', borderRadius: 3, marginTop: 6, overflow: 'hidden' }}>
-                <div
-                  style={{
-                    width: `${lines.length > 0 ? (readyCount / lines.length) * 100 : 0}%`,
-                    height: '100%',
-                    backgroundColor: '#16a34a',
-                  }}
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Right Column: Document Workflow Cards */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: 4 }}>
-              <h2 style={{ fontSize: 16, fontWeight: 700, margin: 0 }}>Documents Workflow</h2>
-              {isPending && (
-                <button
-                  type="button"
-                  className="btn-admin-secondary"
-                  onClick={() => setAddModalOpen(true)}
-                  style={{ padding: '4px 10px', fontSize: 11.5 }}
-                >
-                  <Plus size={12} />
-                  <span>Add Line</span>
-                </button>
-              )}
-            </div>
-
-            {displayedLines.map((l) => {
-              const isChina = l.delegationMode === 'open' || l.delegationMode === 'specific' || Boolean(l.assignedAssociateId);
-              return renderCard(l, isChina);
-            })}
-          </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12 }}>
+          <span style={{ color: 'var(--admin-text-muted)' }}>
+            Total Documents: <strong>{lines.length}</strong>
+          </span>
         </div>
-      )}
+      </div>
+
+      {/* ── Filter Tabs & Add Line Toolbar ──────────────────────────────────── */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          marginBottom: 12,
+          flexWrap: 'wrap',
+          gap: 10,
+        }}
+      >
+        <div style={{ display: 'flex', gap: 4, backgroundColor: 'var(--admin-surface-2, #f1f5f9)', padding: 3, borderRadius: 6 }}>
+          <button
+            type="button"
+            onClick={() => setFilterTab('all')}
+            style={{
+              padding: '4px 10px',
+              fontSize: 12,
+              fontWeight: filterTab === 'all' ? 700 : 500,
+              border: 'none',
+              borderRadius: 4,
+              backgroundColor: filterTab === 'all' ? '#ffffff' : 'transparent',
+              color: filterTab === 'all' ? '#0f172a' : '#64748b',
+              cursor: 'pointer',
+              boxShadow: filterTab === 'all' ? '0 1px 2px rgba(0,0,0,0.05)' : 'none',
+            }}
+          >
+            All Documents ({lines.length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setFilterTab('action_needed')}
+            style={{
+              padding: '4px 10px',
+              fontSize: 12,
+              fontWeight: filterTab === 'action_needed' ? 700 : 500,
+              border: 'none',
+              borderRadius: 4,
+              backgroundColor: filterTab === 'action_needed' ? '#ffffff' : 'transparent',
+              color: filterTab === 'action_needed' ? '#b45309' : '#64748b',
+              cursor: 'pointer',
+              boxShadow: filterTab === 'action_needed' ? '0 1px 2px rgba(0,0,0,0.05)' : 'none',
+            }}
+          >
+            Action Needed ({actionNeededCount})
+          </button>
+          <button
+            type="button"
+            onClick={() => setFilterTab('ready')}
+            style={{
+              padding: '4px 10px',
+              fontSize: 12,
+              fontWeight: filterTab === 'ready' ? 700 : 500,
+              border: 'none',
+              borderRadius: 4,
+              backgroundColor: filterTab === 'ready' ? '#ffffff' : 'transparent',
+              color: filterTab === 'ready' ? '#15803d' : '#64748b',
+              cursor: 'pointer',
+              boxShadow: filterTab === 'ready' ? '0 1px 2px rgba(0,0,0,0.05)' : 'none',
+            }}
+          >
+            Ready / Locked ({readyCount})
+          </button>
+        </div>
+
+        {isPending && (
+          <button
+            type="button"
+            className="btn-admin-secondary"
+            onClick={() => setAddModalOpen(true)}
+            style={{ padding: '5px 12px', fontSize: 12 }}
+          >
+            <Plus size={13} />
+            <span>Add Document Line</span>
+          </button>
+        )}
+      </div>
+
+      {/* ── Clean Split Workstation: Local Station (Left) & China Operations (Right) ─ */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: 16, alignItems: 'start', marginBottom: 24 }}>
+        {/* Station A: Local Headquarters */}
+        <div
+          style={{
+            backgroundColor: 'var(--admin-surface, #ffffff)',
+            borderRadius: 10,
+            border: '1px solid var(--admin-border, #e2e8f0)',
+            padding: 16,
+            boxShadow: '0 1px 3px rgba(0,0,0,0.02)',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: 10, borderBottom: '2px solid #0284c7', marginBottom: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <Building2 size={16} color="#0284c7" />
+              <h3 style={{ fontSize: 14, fontWeight: 700, margin: 0, color: 'var(--admin-text-primary)' }}>
+                🇩🇿 Local Station (Algiers)
+              </h3>
+              <span style={{ fontSize: 11, fontWeight: 700, padding: '1px 7px', borderRadius: 10, backgroundColor: '#e0f2fe', color: '#0284c7' }}>
+                {localLines.length}
+              </span>
+            </div>
+            <span style={{ fontSize: 11.5, color: 'var(--admin-text-muted)' }}>Self-Managed</span>
+          </div>
+
+          {localLines.length === 0 ? (
+            <div style={{ padding: '24px 16px', textAlign: 'center', color: '#94a3b8', fontSize: 12, backgroundColor: 'var(--admin-surface-2, #f8fafc)', borderRadius: 6, border: '1px dashed #e2e8f0' }}>
+              No documents assigned for local handling.
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {localLines.map((l) => renderDocCard(l, false))}
+            </div>
+          )}
+        </div>
+
+        {/* Station B: China Operations */}
+        <div
+          style={{
+            backgroundColor: 'var(--admin-surface, #ffffff)',
+            borderRadius: 10,
+            border: '1px solid var(--admin-border, #e2e8f0)',
+            padding: 16,
+            boxShadow: '0 1px 3px rgba(0,0,0,0.02)',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: 10, borderBottom: '2px solid #ea580c', marginBottom: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <Globe size={16} color="#ea580c" />
+              <h3 style={{ fontSize: 14, fontWeight: 700, margin: 0, color: '#c2410c' }}>
+                🇨🇳 China Delegation Station
+              </h3>
+              <span style={{ fontSize: 11, fontWeight: 700, padding: '1px 7px', borderRadius: 10, backgroundColor: '#ffedd5', color: '#ea580c' }}>
+                {chinaLines.length}
+              </span>
+            </div>
+            <span style={{ fontSize: 11.5, color: 'var(--admin-text-muted)' }}>Overseas Sourcing</span>
+          </div>
+
+          {chinaLines.length === 0 ? (
+            <div style={{ padding: '24px 16px', textAlign: 'center', color: '#94a3b8', fontSize: 12, backgroundColor: '#fff7ed', borderRadius: 6, border: '1px dashed #fed7aa' }}>
+              No documents currently delegated to China.
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {chinaLines.map((l) => renderDocCard(l, true))}
+            </div>
+          )}
+        </div>
+      </div>
 
       {/* ── Modals: Add Line, Delete, Attach, Lock, Reject, Revoke ───────────── */}
       {addModalOpen && (
