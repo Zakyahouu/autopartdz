@@ -108,9 +108,9 @@ export default function OrderDetailPage() {
 
   // Associates list (active users)
   const [associates, setAssociates] = useState([]);
-
-  // Line delegations: map of lineId -> { delegationMode: 'none' | 'open' | 'specific', associateId: string | null }
-  const [lineDelegations, setLineDelegations] = useState({});
+  const [delegateModalLine, setDelegateModalLine] = useState(null);
+  const [delegateBusy, setDelegateBusy] = useState(false);
+  const [successToast, setSuccessToast] = useState('');
 
   // Lock modal (approve / reject attached line)
   const [lockLine, setLockLine] = useState(null);
@@ -159,16 +159,6 @@ export default function OrderDetailPage() {
     const { ok, data } = await apiFetch(`/orders/${id}`);
     if (ok && data) {
       setOrder(data);
-      const delegations = {};
-      (data.lines || []).forEach((l) => {
-        const aId = l.assignedAssociateId?._id || l.assignedAssociateId || '';
-        const mode = l.delegationMode || (aId ? 'specific' : 'none');
-        delegations[l._id] = {
-          delegationMode: mode,
-          associateId: aId ? aId.toString() : null,
-        };
-      });
-      setLineDelegations(delegations);
     } else {
       setError(data?.error || 'Failed to load order details.');
     }
@@ -195,13 +185,9 @@ export default function OrderDetailPage() {
     loadAssociates();
   }, [id]);
 
-  const handleDelegationChange = async (lineId, targetMode, targetAssociateId = null) => {
-    setLineDelegations((prev) => ({
-      ...prev,
-      [lineId]: { delegationMode: targetMode, associateId: targetAssociateId },
-    }));
-
-    if (order && order.status !== 'pending') {
+  const handleDelegation = async (lineId, targetMode, targetAssociateId = null) => {
+    try {
+      setDelegateBusy(true);
       const payload = {
         delegationMode: targetMode,
         associateId: targetMode === 'specific' ? targetAssociateId : null,
@@ -210,12 +196,23 @@ export default function OrderDetailPage() {
         method: 'PATCH',
         body: JSON.stringify(payload),
       });
-      if (res.ok) {
-        await loadOrderDetail();
-      } else {
-        alert(res.data?.error || 'Failed to update line delegation.');
-        await loadOrderDetail();
+      if (!res.ok) {
+        throw new Error(res.data?.error || 'Failed to update document routing.');
       }
+      setSuccessToast(
+        targetMode === 'none'
+          ? 'Moved document to Local Station (Algiers).'
+          : targetMode === 'open'
+          ? 'Delegated document to China Open Claim Pool.'
+          : 'Delegated document to China associate.'
+      );
+      setTimeout(() => setSuccessToast(''), 4000);
+      setDelegateModalLine(null);
+      await loadOrderDetail();
+    } catch (err) {
+      alert(err.message || 'Error updating document routing');
+    } finally {
+      setDelegateBusy(false);
     }
   };
 
@@ -291,25 +288,24 @@ export default function OrderDetailPage() {
 
   const handleConfirmOrder = async () => {
     setActionLoading(true);
-    const lineUpdates = (order?.lines || []).map((l) => {
-      const del = lineDelegations[l._id] || {
-        delegationMode: l.delegationMode || (l.assignedAssociateId ? 'specific' : 'none'),
-        associateId: l.assignedAssociateId?._id || l.assignedAssociateId || null,
-      };
-      return {
-        lineId: l._id,
-        delegationMode: del.delegationMode,
-        associateId: del.associateId,
-      };
-    });
+    const lineUpdates = (order?.lines || []).map((l) => ({
+      lineId: l._id,
+      delegationMode: l.delegationMode || (l.assignedAssociateId ? 'specific' : 'none'),
+      associateId: l.assignedAssociateId?._id || l.assignedAssociateId || null,
+    }));
 
     const res = await apiFetch(`/orders/${id}/confirm`, {
       method: 'PATCH',
       body: JSON.stringify({ lineUpdates }),
     });
     setActionLoading(false);
-    if (res.ok) loadOrderDetail();
-    else alert(res.data?.error || 'Failed to confirm order.');
+    if (res.ok) {
+      setSuccessToast('Order confirmed successfully!');
+      setTimeout(() => setSuccessToast(''), 4000);
+      loadOrderDetail();
+    } else {
+      alert(res.data?.error || 'Failed to confirm order.');
+    }
   };
 
   const handleLockSubmit = async (e) => {
@@ -513,87 +509,19 @@ export default function OrderDetailPage() {
     return true;
   });
 
-  const localLines = displayedLines.filter((l) => {
-    const del = lineDelegations[l._id];
-    const mode = del ? del.delegationMode : (l.delegationMode || 'none');
-    return mode === 'none' && !l.assignedAssociateId;
-  });
+  const isChina = (l) =>
+    l.delegationMode === 'open' ||
+    l.delegationMode === 'specific' ||
+    Boolean(l.assignedAssociateId);
 
-  const chinaLines = displayedLines.filter((l) => {
-    const del = lineDelegations[l._id];
-    const mode = del ? del.delegationMode : (l.delegationMode || 'none');
-    return mode === 'specific' || mode === 'open' || Boolean(l.assignedAssociateId);
-  });
+  const localLines = displayedLines.filter((l) => !isChina(l));
+  const chinaLines = displayedLines.filter((l) => isChina(l));
 
   const actionNeededCount = lines.filter((l) => ['needed', 'attached'].includes(l.status)).length;
   const readyCount = lines.filter((l) => !['needed', 'attached'].includes(l.status)).length;
 
   const isExcluded = (line, uId) =>
     (line.excludedAssociateIds || []).some((ex) => (ex._id || ex).toString() === uId.toString());
-
-  // Helper for Delegation Select Dropdown
-  const renderDelegationSelect = (line, isCompact = false) => {
-    const currentDel = lineDelegations[line._id] || {
-      delegationMode: line.delegationMode || (line.assignedAssociateId ? 'specific' : 'none'),
-      associateId: line.assignedAssociateId?._id || line.assignedAssociateId || null,
-    };
-    const currentVal =
-      currentDel.delegationMode === 'open'
-        ? 'open'
-        : currentDel.delegationMode === 'specific' && currentDel.associateId
-        ? `specific:${currentDel.associateId}`
-        : 'none';
-
-    return (
-      <select
-        className="admin-select"
-        value={currentVal}
-        onChange={(e) => {
-          const val = e.target.value;
-          if (val === 'none') {
-            handleDelegationChange(line._id, 'none', null);
-          } else if (val === 'open') {
-            handleDelegationChange(line._id, 'open', null);
-          } else if (val.startsWith('specific:')) {
-            const associateId = val.split(':')[1];
-            handleDelegationChange(line._id, 'specific', associateId);
-          }
-        }}
-        style={{
-          fontSize: isCompact ? 11 : 12,
-          height: isCompact ? 28 : 32,
-          padding: '2px 6px',
-          maxWidth: isCompact ? 180 : 230,
-          backgroundColor: currentDel.delegationMode !== 'none' ? 'rgba(37, 99, 235, 0.06)' : undefined,
-          borderColor: currentDel.delegationMode !== 'none' ? '#93c5fd' : undefined,
-          color: currentDel.delegationMode !== 'none' ? '#1d4ed8' : undefined,
-          fontWeight: currentDel.delegationMode !== 'none' ? 600 : 400,
-        }}
-      >
-        <option value="none">Local Station (Self)</option>
-        <option value="open">⚡ Open Pool (China)</option>
-        <optgroup label="China Associates">
-          {chinaAssociates.map((u) => {
-            const excluded = isExcluded(line, u._id);
-            return (
-              <option key={u._id} value={`specific:${u._id}`} disabled={excluded}>
-                🇨🇳 {u.name} {excluded ? '(Excluded)' : ''}
-              </option>
-            );
-          })}
-        </optgroup>
-        <optgroup label="Admin Personnel">
-          {associates
-            .filter((u) => u.role !== 'china_associate')
-            .map((u) => (
-              <option key={u._id} value={`specific:${u._id}`}>
-                Admin: {u.name}
-              </option>
-            ))}
-        </optgroup>
-      </select>
-    );
-  };
 
   // Streamlined Document Card (Clean, calm, un-overwhelming)
   const renderDocCard = (line, isChinaGroup) => {
@@ -849,8 +777,73 @@ export default function OrderDetailPage() {
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span style={{ fontSize: 11, color: 'var(--admin-text-muted)' }}>Route:</span>
-            {renderDelegationSelect(line, true)}
+            {!isChinaGroup ? (
+              <button
+                type="button"
+                onClick={() => setDelegateModalLine(line)}
+                disabled={delegateBusy}
+                style={{
+                  padding: '4px 10px',
+                  borderRadius: 5,
+                  border: '1px solid #fed7aa',
+                  backgroundColor: '#fff7ed',
+                  color: '#c2410c',
+                  fontSize: 11.5,
+                  fontWeight: 600,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 5,
+                  cursor: delegateBusy ? 'not-allowed' : 'pointer',
+                }}
+                title="Delegate to China (Open Pool or Associate)"
+              >
+                <Globe size={12} color="#ea580c" />
+                <span>Delegate to China 🇨🇳 →</span>
+              </button>
+            ) : (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <button
+                  type="button"
+                  onClick={() => handleDelegation(line._id, 'none')}
+                  disabled={delegateBusy}
+                  style={{
+                    padding: '4px 10px',
+                    borderRadius: 5,
+                    border: '1px solid #bae6fd',
+                    backgroundColor: '#f0f9ff',
+                    color: '#0369a1',
+                    fontSize: 11.5,
+                    fontWeight: 600,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 5,
+                    cursor: delegateBusy ? 'not-allowed' : 'pointer',
+                  }}
+                  title="Move document back to Local Station (Algiers)"
+                >
+                  <Building2 size={12} color="#0284c7" />
+                  <span>← Move to Local 🇩🇿</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setDelegateModalLine(line)}
+                  disabled={delegateBusy}
+                  style={{
+                    padding: '4px 8px',
+                    borderRadius: 5,
+                    border: '1px solid #e2e8f0',
+                    backgroundColor: '#ffffff',
+                    color: '#64748b',
+                    fontSize: 11,
+                    cursor: delegateBusy ? 'not-allowed' : 'pointer',
+                  }}
+                  title="Change China associate assignment or reopen to pool"
+                >
+                  Reassign
+                </button>
+              </div>
+            )}
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -1033,6 +1026,28 @@ export default function OrderDetailPage() {
           )}
         </div>
       </div>
+
+      {/* Success Toast */}
+      {successToast && (
+        <div
+          style={{
+            padding: '8px 14px',
+            borderRadius: 6,
+            backgroundColor: '#ecfdf5',
+            border: '1px solid #a7f3d0',
+            color: '#065f46',
+            fontSize: 12.5,
+            marginBottom: 14,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            fontWeight: 500,
+          }}
+        >
+          <CheckCircle2 size={15} color="#059669" />
+          <span>{successToast}</span>
+        </div>
+      )}
 
       {/* ── Compact Order Dossier Summary Ribbon ────────────────────────────── */}
       <div
@@ -1557,6 +1572,164 @@ export default function OrderDetailPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── Delegate to China Modal ─────────────────────────────────────── */}
+      {delegateModalLine && (
+        <div
+          className="admin-modal-backdrop"
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !delegateBusy) setDelegateModalLine(null);
+          }}
+        >
+          <div className="admin-modal-panel" role="dialog" aria-modal="true" style={{ width: 520 }}>
+            <div className="admin-modal-header">
+              <div>
+                <h2 className="admin-modal-title" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span>🇨🇳 Delegate to China Operations</span>
+                </h2>
+                <div style={{ fontSize: 12, color: 'var(--admin-text-secondary)', marginTop: 2 }}>
+                  {delegateModalLine.documentTypeId?.fullName || 'Customs Document'}
+                  {delegateModalLine.documentTypeId?.code ? ` (${delegateModalLine.documentTypeId.code})` : ''}
+                </div>
+              </div>
+              <button
+                type="button"
+                className="btn-admin-icon"
+                onClick={() => setDelegateModalLine(null)}
+                disabled={delegateBusy}
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="admin-modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              {/* Option A: Open Pool */}
+              <div
+                style={{
+                  padding: '14px 16px',
+                  borderRadius: 8,
+                  border: '1.5px solid #a7f3d0',
+                  backgroundColor: '#f0fdf4',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: 12,
+                }}
+              >
+                <div>
+                  <div style={{ fontSize: 13.5, fontWeight: 700, color: '#065f46', display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <Sparkles size={14} color="#059669" />
+                    <span>⚡ Post to Open Claim Pool (Recommended)</span>
+                  </div>
+                  <div style={{ fontSize: 11.5, color: '#047857', marginTop: 3 }}>
+                    Available to all active China associates. The first associate who claims it takes responsibility.
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => handleDelegation(delegateModalLine._id, 'open')}
+                  disabled={delegateBusy}
+                  style={{
+                    padding: '6px 14px',
+                    borderRadius: 6,
+                    border: 'none',
+                    backgroundColor: '#059669',
+                    color: '#ffffff',
+                    fontSize: 12,
+                    fontWeight: 700,
+                    cursor: delegateBusy ? 'not-allowed' : 'pointer',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {delegateBusy ? 'Posting…' : 'Post to Pool'}
+                </button>
+              </div>
+
+              {/* Option B: Direct Assignment to an Associate */}
+              <div>
+                <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--admin-text-primary)', marginBottom: 8 }}>
+                  Or Assign Directly to an Associate:
+                </div>
+
+                {chinaAssociates.length === 0 ? (
+                  <div style={{ fontSize: 12, color: 'var(--admin-text-muted)', padding: '10px 12px', border: '1px dashed #e2e8f0', borderRadius: 6 }}>
+                    No active China associates registered in the system.
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 220, overflowY: 'auto' }}>
+                    {chinaAssociates.map((u) => {
+                      const excluded = isExcluded(delegateModalLine, u._id);
+                      const isCurrent =
+                        delegateModalLine.assignedAssociateId?._id === u._id ||
+                        delegateModalLine.assignedAssociateId === u._id;
+                      return (
+                        <div
+                          key={u._id}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            padding: '8px 12px',
+                            borderRadius: 6,
+                            border: '1px solid #e2e8f0',
+                            backgroundColor: isCurrent ? '#eff6ff' : '#ffffff',
+                          }}
+                        >
+                          <div>
+                            <span style={{ fontSize: 12.5, fontWeight: 600, color: '#0f172a' }}>
+                              🇨🇳 {u.name}
+                            </span>
+                            {u.email && (
+                              <span style={{ fontSize: 11, color: '#64748b', marginLeft: 6 }}>
+                                ({u.email})
+                              </span>
+                            )}
+                            {excluded && (
+                              <span style={{ fontSize: 10.5, color: '#dc2626', marginLeft: 6, fontWeight: 600 }}>
+                                (Previously Revoked)
+                              </span>
+                            )}
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => handleDelegation(delegateModalLine._id, 'specific', u._id)}
+                            disabled={delegateBusy || excluded || isCurrent}
+                            style={{
+                              padding: '4px 12px',
+                              borderRadius: 5,
+                              border: isCurrent ? '1px solid #93c5fd' : '1px solid #cbd5e1',
+                              backgroundColor: isCurrent ? '#dbeafe' : '#ffffff',
+                              color: isCurrent ? '#1d4ed8' : '#334155',
+                              fontSize: 11.5,
+                              fontWeight: 600,
+                              cursor: delegateBusy || excluded || isCurrent ? 'not-allowed' : 'pointer',
+                            }}
+                          >
+                            {isCurrent ? 'Assigned' : 'Assign'}
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="admin-modal-footer">
+              <button
+                type="button"
+                className="btn-admin-secondary"
+                onClick={() => setDelegateModalLine(null)}
+                disabled={delegateBusy}
+              >
+                Cancel
+              </button>
+            </div>
           </div>
         </div>
       )}
