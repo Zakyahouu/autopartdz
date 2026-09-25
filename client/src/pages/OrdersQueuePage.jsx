@@ -6,23 +6,38 @@ import {
   CheckCircle2,
   Clock,
   AlertCircle,
-  FileText,
   RotateCcw,
   PlusCircle,
   ArrowRight,
-  Filter,
+  RefreshCw,
+  ShieldCheck,
+  Package,
+  Truck,
+  MapPin,
 } from 'lucide-react';
+
+const STATUS_TABS = [
+  { key: 'pending', label: 'Pending' },
+  { key: 'confirmed', label: 'Confirmed' },
+  { key: 'in_progress', label: 'In Progress' },
+  { key: 'ready_for_dispatch', label: 'Ready for Dispatch' },
+  { key: 'packaged', label: 'Packaged' },
+  { key: 'sent_to_client', label: 'Sent to Client' },
+  { key: 'delivered', label: 'Delivered' },
+  { key: 'completed', label: 'Completed' },
+  { key: 'rejected', label: 'Rejected' },
+  { key: 'all', label: 'All Orders' },
+];
 
 export default function OrdersQueuePage() {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [statusFilter, setStatusFilter] = useState('pending'); // 'pending' | 'confirmed' | 'all'
+  const [statusFilter, setStatusFilter] = useState('pending'); // Default tab: pending
   const [search, setSearch] = useState('');
 
   const loadOrders = async () => {
     setLoading(true);
-    const query = statusFilter === 'all' ? '' : `?status=${statusFilter}`;
-    const { ok, data } = await apiFetch(`/orders${query}`);
+    const { ok, data } = await apiFetch('/orders');
     if (ok && Array.isArray(data)) {
       setOrders(data);
     }
@@ -31,39 +46,89 @@ export default function OrdersQueuePage() {
 
   useEffect(() => {
     loadOrders();
-  }, [statusFilter]);
+  }, []);
+
+  const counts = useMemo(() => {
+    const c = { all: orders.length };
+    STATUS_TABS.forEach((t) => {
+      if (t.key !== 'all') c[t.key] = 0;
+    });
+    orders.forEach((o) => {
+      if (c[o.status] !== undefined) c[o.status]++;
+    });
+    return c;
+  }, [orders]);
 
   const filteredOrders = useMemo(() => {
-    if (!search.trim()) return orders;
+    let list = orders;
+    if (statusFilter !== 'all') {
+      list = list.filter((o) => o.status === statusFilter);
+    }
+    if (!search.trim()) return list;
     const q = search.toLowerCase();
-    return orders.filter((o) => {
+    return list.filter((o) => {
       const matchCode = o.trackingCode?.toLowerCase().includes(q);
       const matchName = o.clientName?.toLowerCase().includes(q);
       const matchPhone = o.phone?.toLowerCase().includes(q);
       const matchVin = o.vin?.toLowerCase().includes(q);
       return matchCode || matchName || matchPhone || matchVin;
     });
-  }, [orders, search]);
+  }, [orders, statusFilter, search]);
 
   const getStatusBadge = (status) => {
     switch (status) {
       case 'pending':
         return (
-          <span className="admin-status" style={{ background: 'rgba(234, 88, 12, 0.1)', color: '#ea580c' }}>
+          <span className="admin-status" style={{ background: 'rgba(234, 88, 12, 0.1)', color: '#ea580c', borderColor: 'rgba(234, 88, 12, 0.25)' }}>
             <Clock size={12} strokeWidth={2.2} />
             <span>Pending Review</span>
           </span>
         );
       case 'confirmed':
         return (
-          <span className="admin-status is-active">
+          <span className="admin-status" style={{ background: 'rgba(37, 99, 235, 0.1)', color: '#2563eb', borderColor: 'rgba(37, 99, 235, 0.25)' }}>
             <CheckCircle2 size={12} strokeWidth={2.2} />
             <span>Confirmed</span>
           </span>
         );
+      case 'in_progress':
+        return (
+          <span className="admin-status" style={{ background: 'rgba(217, 119, 6, 0.1)', color: '#d97706', borderColor: 'rgba(217, 119, 6, 0.25)' }}>
+            <RefreshCw size={12} strokeWidth={2.2} />
+            <span>In Progress</span>
+          </span>
+        );
+      case 'ready_for_dispatch':
+        return (
+          <span className="admin-status" style={{ background: 'rgba(124, 58, 237, 0.1)', color: '#7c3aed', borderColor: 'rgba(124, 58, 237, 0.25)' }}>
+            <ShieldCheck size={12} strokeWidth={2.2} />
+            <span>Ready for Dispatch</span>
+          </span>
+        );
+      case 'packaged':
+        return (
+          <span className="admin-status" style={{ background: 'rgba(8, 145, 178, 0.1)', color: '#0891b2', borderColor: 'rgba(8, 145, 178, 0.25)' }}>
+            <Package size={12} strokeWidth={2.2} />
+            <span>Packaged</span>
+          </span>
+        );
+      case 'sent_to_client':
+        return (
+          <span className="admin-status" style={{ background: 'rgba(2, 132, 199, 0.1)', color: '#0284c7', borderColor: 'rgba(2, 132, 199, 0.25)' }}>
+            <Truck size={12} strokeWidth={2.2} />
+            <span>Sent to Client</span>
+          </span>
+        );
+      case 'delivered':
+        return (
+          <span className="admin-status" style={{ background: 'rgba(5, 150, 105, 0.1)', color: '#059669', borderColor: 'rgba(5, 150, 105, 0.25)' }}>
+            <MapPin size={12} strokeWidth={2.2} />
+            <span>Delivered</span>
+          </span>
+        );
       case 'completed':
         return (
-          <span className="admin-status" style={{ background: 'rgba(16, 185, 129, 0.1)', color: '#059669', borderColor: 'rgba(16, 185, 129, 0.25)' }}>
+          <span className="admin-status is-active" style={{ background: 'rgba(22, 163, 74, 0.1)', color: '#16a34a', borderColor: 'rgba(22, 163, 74, 0.25)' }}>
             <CheckCircle2 size={12} strokeWidth={2.2} />
             <span>Completed</span>
           </span>
@@ -78,7 +143,7 @@ export default function OrdersQueuePage() {
       default:
         return (
           <span className="admin-status">
-            <span>{status}</span>
+            <span>{status?.replace(/_/g, ' ') || 'Unknown'}</span>
           </span>
         );
     }
@@ -87,59 +152,91 @@ export default function OrdersQueuePage() {
   return (
     <div>
       {/* Page Header */}
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        marginBottom: 20,
-        flexWrap: 'wrap',
-        gap: 12,
-      }}>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          marginBottom: 20,
+          flexWrap: 'wrap',
+          gap: 12,
+        }}
+      >
         <div>
           <h1 style={{ fontSize: 20, fontWeight: 700, color: 'var(--admin-text-primary)' }}>
             Orders Management
           </h1>
           <p style={{ fontSize: 13, color: 'var(--admin-text-secondary)', marginTop: 2 }}>
-            Review, verify customs documentation sources, and confirm incoming client import demands.
+            Manage client orders across all production lifecycle stages from intake to delivery.
           </p>
         </div>
       </div>
 
-      {/* Toolbar: Status Filter and Search */}
-      <div className="admin-toolbar">
-        <div className="admin-filter-tabs">
-          <button
-            type="button"
-            className={`admin-filter-tab ${statusFilter === 'pending' ? 'active' : ''}`}
-            onClick={() => setStatusFilter('pending')}
+      {/* Toolbar: Status Tabs and Search */}
+      <div className="admin-toolbar" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+          {/* Status Tabs Bar */}
+          <div
+            className="admin-filter-tabs"
+            style={{
+              overflowX: 'auto',
+              maxWidth: '100%',
+              whiteSpace: 'nowrap',
+              padding: '4px',
+              gap: 3,
+            }}
           >
-            Pending Review
-          </button>
-          <button
-            type="button"
-            className={`admin-filter-tab ${statusFilter === 'confirmed' ? 'active' : ''}`}
-            onClick={() => setStatusFilter('confirmed')}
-          >
-            Confirmed
-          </button>
-          <button
-            type="button"
-            className={`admin-filter-tab ${statusFilter === 'all' ? 'active' : ''}`}
-            onClick={() => setStatusFilter('all')}
-          >
-            All Orders
-          </button>
-        </div>
+            {STATUS_TABS.map((tab) => {
+              const isActive = statusFilter === tab.key;
+              const count = counts[tab.key] || 0;
+              return (
+                <button
+                  key={tab.key}
+                  type="button"
+                  className={`admin-filter-tab ${isActive ? 'active' : ''}`}
+                  onClick={() => setStatusFilter(tab.key)}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    padding: '6px 12px',
+                    borderRadius: 6,
+                    fontWeight: isActive ? 700 : 500,
+                    cursor: 'pointer',
+                    backgroundColor: isActive ? 'var(--admin-surface-hover, #f1f5f9)' : 'transparent',
+                  }}
+                >
+                  <span>{tab.label}</span>
+                  <span
+                    style={{
+                      fontSize: 11,
+                      padding: '1px 6px',
+                      borderRadius: 10,
+                      backgroundColor: isActive ? 'var(--admin-accent)' : 'var(--admin-surface-2, #e2e8f0)',
+                      color: isActive ? '#ffffff' : 'var(--admin-text-secondary)',
+                      fontWeight: 700,
+                      minWidth: 18,
+                      textAlign: 'center',
+                    }}
+                  >
+                    {count}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
 
-        <div className="admin-search-wrapper">
-          <Search size={15} className="admin-search-icon" />
-          <input
-            type="search"
-            className="admin-search-input"
-            placeholder="Search tracking code, client, phone, VIN…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
+          {/* Search Box */}
+          <div className="admin-search-wrapper" style={{ minWidth: 260 }}>
+            <Search size={15} className="admin-search-icon" />
+            <input
+              type="search"
+              className="admin-search-input"
+              placeholder="Search code, client, phone, VIN…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
         </div>
       </div>
 
@@ -154,7 +251,7 @@ export default function OrdersQueuePage() {
               <th>Vehicle / Category</th>
               <th className="align-center" style={{ width: 110 }}>Documents</th>
               <th style={{ width: 140 }}>Created</th>
-              <th className="align-center" style={{ width: 130 }}>Status</th>
+              <th className="align-center" style={{ width: 150 }}>Status</th>
               <th className="align-right" style={{ width: 100 }}>Actions</th>
             </tr>
           </thead>
@@ -171,7 +268,7 @@ export default function OrdersQueuePage() {
             ) : filteredOrders.length === 0 ? (
               <tr>
                 <td colSpan="8" className="admin-table-empty">
-                  No orders found in this view.
+                  No orders found in status &ldquo;{STATUS_TABS.find((t) => t.key === statusFilter)?.label}&rdquo;.
                 </td>
               </tr>
             ) : (
