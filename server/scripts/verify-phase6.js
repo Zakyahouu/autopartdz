@@ -227,10 +227,12 @@ async function run() {
       else fail(`order.${f} present`, 'Missing');
     }
 
-    if ('clientPhone' in ord || 'address' in ord || 'clientName' in ord) {
-      fail('No PII in order sub-object', `Keys: ${Object.keys(ord).join(', ')}`);
+    // Phase 9 explicit policy reversal: name, passport, address are allowed for physical fulfillment;
+    // phone, email, and pricing (clientPrice/costPrice) remain strictly excluded.
+    if ('clientPhone' in ord || 'phone' in ord || 'email' in ord || 'clientPrice' in foundLineA || 'costPrice' in foundLineA) {
+      fail('Strict privacy: phone/email/prices excluded', `Keys: ${Object.keys(ord).join(', ')}`);
     } else {
-      pass('No PII (phone/address/name) in order sub-object');
+      pass('Strict privacy: phone/email/prices strictly excluded from china/lines');
     }
   }
 
