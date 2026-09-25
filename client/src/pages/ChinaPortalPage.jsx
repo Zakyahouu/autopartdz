@@ -15,7 +15,6 @@ import {
   Download,
   Package,
   RotateCcw,
-  User,
   Car,
   MapPin,
   CreditCard,

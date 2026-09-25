@@ -8,32 +8,24 @@ import {
   Clock,
   Trash2,
   Plus,
-  ShieldCheck,
   User,
   Car,
   FileText,
   RotateCcw,
   X,
-  ExternalLink,
-  Upload,
   Copy,
   Check,
-  RefreshCw,
   Paperclip,
   Download,
   Package,
   Truck,
   MapPin,
   Lock,
-  Unlock,
-  UserCheck,
   UserX,
   Printer,
-  Send,
   Building2,
   Globe,
   Sparkles,
-  Ban,
 } from 'lucide-react';
 
 const getStatusBadge = (status) => {
@@ -918,6 +910,9 @@ export default function OrderDetailPage() {
     );
   };
 
+  const clientDisplayName =
+    `${order?.firstName || ''} ${order?.lastName || ''}`.trim() || order?.clientName || 'Client';
+
   return (
     <div>
 
@@ -928,8 +923,19 @@ export default function OrderDetailPage() {
             <ArrowLeft size={14} />
             <span>Queue</span>
           </Link>
-          <h1 style={{ fontSize: 18, fontWeight: 700, color: 'var(--admin-text-primary)', margin: 0 }}>
-            Order <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--admin-accent)' }}>{order.trackingCode}</span>
+          <h1 style={{ fontSize: 18, fontWeight: 700, color: 'var(--admin-text-primary)', margin: 0, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            <span>Order</span>
+            <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--admin-accent)' }}>{order.trackingCode}</span>
+            {order.trackingCode && (
+              <button
+                type="button"
+                onClick={() => handleCopyTracking(order.trackingCode)}
+                style={{ border: 'none', background: 'transparent', cursor: 'pointer', padding: '1px 3px', color: copiedTracking ? '#16a34a' : 'var(--admin-text-muted)' }}
+                title="Copy tracking code"
+              >
+                {copiedTracking ? <Check size={13} /> : <Copy size={13} />}
+              </button>
+            )}
           </h1>
           {order.orderType === 'correction' ? (
             <span className="admin-doc-chip" style={{ color: '#ea580c', borderColor: '#fdba74' }}>
