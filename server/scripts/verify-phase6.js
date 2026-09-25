@@ -101,7 +101,7 @@ async function run() {
     assocA = await User.create({
       name: 'Phase6 AssocA',
       email: `p6-assocA-${Date.now()}@test.invalid`,
-      password: 'hashed-placeholder',
+      passwordHash: 'hashed-placeholder',
       role: 'china_associate',
       active: true,
     });
@@ -111,7 +111,7 @@ async function run() {
     assocB = await User.create({
       name: 'Phase6 AssocB',
       email: `p6-assocB-${Date.now()}@test.invalid`,
-      password: 'hashed-placeholder',
+      passwordHash: 'hashed-placeholder',
       role: 'china_associate',
       active: true,
     });

@@ -29,7 +29,78 @@ import {
   Lock,
   Unlock,
   UserCheck,
+  Printer,
+  Send,
 } from 'lucide-react';
+
+const getStatusBadge = (status) => {
+  switch (status) {
+    case 'needed':
+      return {
+        label: 'Action Needed',
+        icon: <Clock size={12} />,
+        color: '#b45309',
+        bg: '#fef3c7',
+        border: '#fcd34d',
+      };
+    case 'attached':
+      return {
+        label: 'Attached — Review Ready',
+        icon: <FileText size={12} />,
+        color: '#1d4ed8',
+        bg: '#dbeafe',
+        border: '#bfdbfe',
+      };
+    case 'ready':
+      return {
+        label: 'Ready / Locked',
+        icon: <CheckCircle2 size={12} />,
+        color: '#15803d',
+        bg: '#dcfce7',
+        border: '#bbf7d0',
+      };
+    case 'packaged':
+      return {
+        label: 'Packaged',
+        icon: <Package size={12} />,
+        color: '#0e7490',
+        bg: '#cffafe',
+        border: '#a5f3fc',
+      };
+    case 'sent_to_client':
+      return {
+        label: 'Dispatched',
+        icon: <Truck size={12} />,
+        color: '#0369a1',
+        bg: '#e0f2fe',
+        border: '#bae6fd',
+      };
+    case 'delivered':
+      return {
+        label: 'Delivered',
+        icon: <MapPin size={12} />,
+        color: '#047857',
+        bg: '#d1fae5',
+        border: '#a7f3d0',
+      };
+    case 'completed':
+      return {
+        label: 'Completed',
+        icon: <CheckCircle2 size={12} />,
+        color: '#047857',
+        bg: '#d1fae5',
+        border: '#a7f3d0',
+      };
+    default:
+      return {
+        label: status ? status.replace(/_/g, ' ') : 'Unknown',
+        icon: <Clock size={12} />,
+        color: 'var(--admin-text-secondary)',
+        bg: 'var(--admin-surface-2)',
+        border: 'var(--admin-border)',
+      };
+  }
+};
 
 export default function OrderDetailPage() {
   const { id } = useParams();
@@ -66,6 +137,7 @@ export default function OrderDetailPage() {
   const [fulfillmentBusy, setFulfillmentBusy] = useState(false);
 
   const [copiedTracking, setCopiedTracking] = useState('');
+  const [filterTab, setFilterTab] = useState('all'); // 'all' | 'action_needed' | 'ready'
 
   // Add line modal
   const [addModalOpen, setAddModalOpen] = useState(false);
@@ -332,6 +404,23 @@ export default function OrderDetailPage() {
     }
   };
 
+  // Open file in new tab for direct viewing and native printing
+  const handleOpenFile = async (fileId) => {
+    try {
+      const token = localStorage.getItem('autopartdz_token');
+      const res = await fetch(`/api/files/${fileId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error('Failed to retrieve file.');
+      const blob = await res.blob();
+      const fileUrl = window.URL.createObjectURL(blob);
+      window.open(fileUrl, '_blank');
+      setTimeout(() => window.URL.revokeObjectURL(fileUrl), 60000);
+    } catch (err) {
+      alert(err.message || 'Error opening file');
+    }
+  };
+
   const handleCopyTracking = (code) => {
     navigator.clipboard.writeText(code);
     setCopiedTracking(code);
@@ -372,7 +461,36 @@ export default function OrderDetailPage() {
 
   const isPending = order.status === 'pending';
   const lines = order.lines || [];
-  const linesMissingSourceCount = lines.filter((l) => !(lineSources[l._id] || l.source)).length;
+  const chinaAssociates = associates.filter((u) => u.role === 'china_associate');
+
+  const statusPriority = {
+    needed: 1,
+    attached: 2,
+    ready: 3,
+    packaged: 4,
+    sent_to_client: 5,
+    delivered: 6,
+    completed: 7,
+  };
+
+  const sortedLines = [...lines].sort((a, b) => {
+    const pa = statusPriority[a.status] || 99;
+    const pb = statusPriority[b.status] || 99;
+    return pa - pb;
+  });
+
+  const displayedLines = sortedLines.filter((l) => {
+    if (filterTab === 'action_needed') {
+      return ['needed', 'attached'].includes(l.status);
+    }
+    if (filterTab === 'ready') {
+      return !['needed', 'attached'].includes(l.status);
+    }
+    return true;
+  });
+
+  const actionNeededCount = lines.filter((l) => ['needed', 'attached'].includes(l.status)).length;
+  const readyCount = lines.filter((l) => !['needed', 'attached'].includes(l.status)).length;
 
   return (
     <div>
@@ -416,8 +534,8 @@ export default function OrderDetailPage() {
               type="button"
               className="btn-admin-primary"
               onClick={handleConfirmOrder}
-              disabled={actionLoading || linesMissingSourceCount > 0}
-              title={linesMissingSourceCount > 0 ? 'Assign all line sources before confirming' : 'Confirm Order'}
+              disabled={actionLoading}
+              title="Confirm Order"
             >
               <CheckCircle2 size={15} />
               <span>Confirm Order</span>
@@ -521,16 +639,6 @@ export default function OrderDetailPage() {
           <AlertTriangle size={16} style={{ flexShrink: 0 }} />
           <span>
             <strong>Correction Claim Rejected:</strong> {order.rejectionReason || 'No reason provided.'}
-          </span>
-        </div>
-      )}
-
-      {/* Source Warning Banner */}
-      {isPending && linesMissingSourceCount > 0 && (
-        <div className="admin-alert admin-alert-error" style={{ marginBottom: 16 }}>
-          <AlertTriangle size={16} style={{ flexShrink: 0 }} />
-          <span>
-            <strong>Action Required:</strong> {linesMissingSourceCount} document line(s) have an unassigned source (e.g. from a &quot;Mixed&quot; catalog document). Please select <strong>Local</strong> or <strong>China</strong> for each line to enable confirmation.
           </span>
         </div>
       )}
@@ -654,16 +762,96 @@ export default function OrderDetailPage() {
         </div>
       </div>
 
-      {/* Document Lines Management */}
-      <div className="admin-card">
-        <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--admin-border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
-          <div>
-            <h2 style={{ fontSize: 15, fontWeight: 700, color: 'var(--admin-text-primary)', margin: 0 }}>
-              Document Lines ({lines.length})
-            </h2>
-            <p style={{ fontSize: 12, color: 'var(--admin-text-secondary)', marginTop: 2 }}>
-              Finalize document selection and define fulfillment source per line.
-            </p>
+      {/* Document Dossier (Document-First Card List) */}
+      <div className="admin-card" style={{ padding: 0, overflow: 'hidden', marginBottom: 20 }}>
+        {/* Header with Title and Filter Tabs */}
+        <div
+          style={{
+            padding: '16px 20px',
+            borderBottom: '1px solid var(--admin-border)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: 12,
+            backgroundColor: 'var(--admin-surface)',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+            <div>
+              <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--admin-text-primary)', margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <FileText size={18} color="var(--admin-accent)" />
+                <span>Document Dossier ({lines.length})</span>
+              </h2>
+              <p style={{ fontSize: 12, color: 'var(--admin-text-secondary)', marginTop: 2, marginBottom: 0 }}>
+                Attach, review, lock, and print physical documents. Actionable items surface first.
+              </p>
+            </div>
+
+            {/* Quick Status Filter Tabs */}
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 2,
+                backgroundColor: 'var(--admin-surface-2, #f1f5f9)',
+                padding: '3px',
+                borderRadius: 6,
+                border: '1px solid var(--admin-border)',
+              }}
+            >
+              <button
+                type="button"
+                onClick={() => setFilterTab('all')}
+                style={{
+                  padding: '4px 10px',
+                  fontSize: 12,
+                  fontWeight: filterTab === 'all' ? 700 : 500,
+                  border: 'none',
+                  borderRadius: 4,
+                  backgroundColor: filterTab === 'all' ? 'var(--admin-surface, #ffffff)' : 'transparent',
+                  color: filterTab === 'all' ? 'var(--admin-text-primary)' : 'var(--admin-text-secondary)',
+                  cursor: 'pointer',
+                  boxShadow: filterTab === 'all' ? '0 1px 2px rgba(0,0,0,0.06)' : 'none',
+                }}
+              >
+                All ({lines.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setFilterTab('action_needed')}
+                style={{
+                  padding: '4px 10px',
+                  fontSize: 12,
+                  fontWeight: filterTab === 'action_needed' ? 700 : 500,
+                  border: 'none',
+                  borderRadius: 4,
+                  backgroundColor: filterTab === 'action_needed' ? 'var(--admin-surface, #ffffff)' : 'transparent',
+                  color: filterTab === 'action_needed' ? '#b45309' : 'var(--admin-text-secondary)',
+                  cursor: 'pointer',
+                  boxShadow: filterTab === 'action_needed' ? '0 1px 2px rgba(0,0,0,0.06)' : 'none',
+                }}
+              >
+                Action Needed ({actionNeededCount})
+              </button>
+              <button
+                type="button"
+                onClick={() => setFilterTab('ready')}
+                style={{
+                  padding: '4px 10px',
+                  fontSize: 12,
+                  fontWeight: filterTab === 'ready' ? 700 : 500,
+                  border: 'none',
+                  borderRadius: 4,
+                  backgroundColor: filterTab === 'ready' ? 'var(--admin-surface, #ffffff)' : 'transparent',
+                  color: filterTab === 'ready' ? '#15803d' : 'var(--admin-text-secondary)',
+                  cursor: 'pointer',
+                  boxShadow: filterTab === 'ready' ? '0 1px 2px rgba(0,0,0,0.06)' : 'none',
+                }}
+              >
+                Locked & Ready ({readyCount})
+              </button>
+            </div>
           </div>
 
           {isPending && (
@@ -671,7 +859,7 @@ export default function OrderDetailPage() {
               type="button"
               className="btn-admin-secondary"
               onClick={() => setAddModalOpen(true)}
-              style={{ padding: '6px 12px', fontSize: 12 }}
+              style={{ padding: '6px 14px', fontSize: 12.5 }}
             >
               <Plus size={14} />
               <span>Add Document Line</span>
@@ -679,297 +867,464 @@ export default function OrderDetailPage() {
           )}
         </div>
 
-        <table className="admin-table">
-          <thead>
-            <tr>
-              <th>Document</th>
-              <th style={{ width: 170 }}>Translation Mode</th>
-              <th className="align-right" style={{ width: 110 }}>Client Fee</th>
-              <th className="align-right" style={{ width: 110 }}>Cost Price</th>
-              <th style={{ width: 220 }}>Fulfillment & Assignee</th>
-              <th className="align-center" style={{ width: 100 }}>Status</th>
-              <th className="align-right" style={{ width: 130 }}>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {lines.length === 0 ? (
-              <tr>
-                <td colSpan={7} className="admin-table-empty">
-                  No document lines on this order.
-                </td>
-              </tr>
-            ) : (
-              lines.map((line) => {
-                const currentSource = lineSources[line._id] !== undefined ? lineSources[line._id] : line.source;
-                const isSourceUnset = !currentSource;
-                const currentAssignee = lineAssignees[line._id] !== undefined ? lineAssignees[line._id] : (line.assignedAssociateId?._id || line.assignedAssociateId || '');
-                const isChinaWithoutAssignee = currentSource === 'china' && !currentAssignee;
+        {/* Card List Container */}
+        <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+          {lines.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--admin-text-muted)' }}>
+              No document lines on this order.
+            </div>
+          ) : displayedLines.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '30px 20px', color: 'var(--admin-text-muted)' }}>
+              <div>No documents match the active filter.</div>
+              <button
+                type="button"
+                className="btn-admin-secondary"
+                onClick={() => setFilterTab('all')}
+                style={{ marginTop: 10, fontSize: 12, padding: '4px 10px' }}
+              >
+                Show All ({lines.length})
+              </button>
+            </div>
+          ) : (
+            displayedLines.map((line) => {
+              const currentSource = lineSources[line._id] !== undefined ? lineSources[line._id] : (line.source || '');
+              const currentAssignee = lineAssignees[line._id] !== undefined ? lineAssignees[line._id] : (line.assignedAssociateId?._id || line.assignedAssociateId || '');
+              const statusCfg = getStatusBadge(line.status);
+              const rejectionNote = line.lastRejectionNote || [...(line.activityLog || [])].reverse().find((e) => e.action === 'rejected')?.note;
 
-                return (
-                  <tr key={line._id}>
-                    <td>
-                      <div style={{ fontWeight: 600, color: 'var(--admin-text-primary)' }}>
-                        {line.documentTypeId?.fullName || line.documentTypeId?.shortName || 'Document'}
-                      </div>
-                      {line.documentTypeId?.code && (
-                        <span className="admin-doc-chip" style={{ fontSize: 10, padding: '1px 5px', marginTop: 2 }}>
-                          {line.documentTypeId.code}
+              return (
+                <div
+                  key={line._id}
+                  style={{
+                    backgroundColor: 'var(--admin-surface)',
+                    border: '1px solid var(--admin-border)',
+                    borderLeft: `4px solid ${
+                      line.status === 'needed' ? '#f59e0b' : line.status === 'attached' ? '#2563eb' : '#16a34a'
+                    }`,
+                    borderRadius: 8,
+                    padding: '16px 18px',
+                    boxShadow: '0 1px 3px rgba(0, 0, 0, 0.03)',
+                    transition: 'border-color 0.15s ease',
+                  }}
+                >
+                  {/* Card Header: Document Name, Badges, Status, and Delete Action */}
+                  <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+                    <div style={{ flex: 1, minWidth: 240 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                        <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--admin-text-primary)' }}>
+                          {line.documentTypeId?.fullName || line.documentTypeId?.shortName || 'Document'}
                         </span>
-                      )}
-                      {line.correctionReason && (
-                        <div style={{ marginTop: 4, fontSize: 11.5, color: '#ea580c', background: 'rgba(234, 88, 12, 0.08)', padding: '4px 8px', borderRadius: 4 }}>
-                          <strong>Correction Reason:</strong> {line.correctionReason}
-                        </div>
-                      )}
-
-                      {/* Uploaded Documents List */}
-                      {line.uploadedFiles && line.uploadedFiles.length > 0 && (
-                        <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
-                          <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--admin-text-secondary)', display: 'flex', alignItems: 'center', gap: 4 }}>
-                            <FileText size={11} />
-                            <span>Uploaded Files ({line.uploadedFiles.length}):</span>
-                          </div>
-                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                            {line.uploadedFiles.map((f) => {
-                              const uploaderName = f.uploadedByUserId?.name || 'User';
-                              const uploaderRole = f.uploadedByUserId?.role ? `(${f.uploadedByUserId.role})` : '';
-                              const uploadDate = f.uploadedAt ? new Date(f.uploadedAt).toLocaleDateString() : '';
-                              const fileSizeKb = f.size ? `${Math.round(f.size / 1024)} KB` : '';
-                              return (
-                                <div
-                                  key={f._id}
-                                  style={{
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                    gap: 6,
-                                    backgroundColor: 'var(--admin-surface-2, #f8fafc)',
-                                    border: '1px solid var(--admin-border, #e2e8f0)',
-                                    borderRadius: 4,
-                                    padding: '2px 8px',
-                                    fontSize: 11,
-                                  }}
-                                >
-                                  <FileText size={12} color="var(--admin-accent)" />
-                                  <span style={{ fontWeight: 600, color: 'var(--admin-text-primary)' }} title={f.filename}>
-                                    {f.filename}
-                                  </span>
-                                  <span style={{ fontSize: 10, color: 'var(--admin-text-secondary)' }}>
-                                    {fileSizeKb && `(${fileSizeKb})`} • {uploaderName} {uploaderRole} • {uploadDate}
-                                  </span>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleDownloadFile(f._id, f.filename)}
-                                    style={{
-                                      border: 'none',
-                                      background: 'transparent',
-                                      cursor: 'pointer',
-                                      color: 'var(--admin-accent)',
-                                      display: 'inline-flex',
-                                      alignItems: 'center',
-                                      padding: 2,
-                                    }}
-                                    title="View or download document"
-                                  >
-                                    <Download size={12} />
-                                  </button>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      )}
-                    </td>
-
-                    <td>
-                      <span className="admin-badge" style={{ fontSize: 11.5 }}>
-                        {line.translationMode === 'original_only'
-                          ? 'Original Only'
-                          : line.translationMode === 'original_plus_translation'
-                          ? 'Original + Translation'
-                          : 'Translation Only'}
-                      </span>
-                    </td>
-
-                    <td className="align-right" style={{ fontFamily: 'var(--font-mono)', fontWeight: 600 }}>
-                      {line.clientPrice?.toLocaleString()} DZD
-                    </td>
-
-                    <td className="align-right" style={{ fontFamily: 'var(--font-mono)', color: 'var(--admin-text-muted)' }}>
-                      {line.costPrice?.toLocaleString()} DZD
-                    </td>
-
-                    <td>
-                      {isPending ? (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                          <select
-                            className="admin-select"
-                            value={currentSource || ''}
-                            onChange={(e) => handleSourceChange(line._id, e.target.value)}
-                            style={{
-                              fontSize: 12,
-                              height: 32,
-                              borderColor: isSourceUnset ? 'var(--admin-accent)' : undefined,
-                              background: isSourceUnset ? 'rgba(168, 35, 27, 0.05)' : undefined,
-                            }}
-                          >
-                            <option value="">— Select Source (Required) —</option>
-                            <option value="local">Local (Algeria Print)</option>
-                            <option value="china">China (Shipped)</option>
-                          </select>
-
-                          {currentSource === 'china' && (
-                            <select
-                              className="admin-select"
-                              value={currentAssignee || ''}
-                              onChange={(e) => handleAssigneeChange(line._id, e.target.value)}
-                              style={{
-                                fontSize: 11.5,
-                                height: 30,
-                                borderColor: isChinaWithoutAssignee ? '#f59e0b' : undefined,
-                                background: isChinaWithoutAssignee ? 'rgba(245, 158, 11, 0.08)' : undefined,
-                              }}
-                            >
-                              <option value="">— Assign Associate (Optional) —</option>
-                              {associates.map((u) => (
-                                <option key={u._id} value={u._id}>
-                                  {u.name} ({u.role === 'china_associate' ? 'China' : 'Admin'})
-                                </option>
-                              ))}
-                            </select>
-                          )}
-                        </div>
-                      ) : (
-                        <div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                            <span className={`admin-badge ${line.source === 'local' ? 'is-active' : ''}`}>
-                              {line.source === 'local' ? 'Local Print' : 'China Shipped'}
-                            </span>
-                            {line.source === 'china' && (
-                              <span
-                                className="admin-doc-chip"
-                                style={{
-                                  fontSize: 11,
-                                  background: line.assignedAssociateId ? '#f1f5f9' : '#fef3c7',
-                                  color: line.assignedAssociateId ? '#334155' : '#b45309',
-                                }}
-                              >
-                                {line.assignedAssociateId?.name ? line.assignedAssociateId.name : 'Unassigned'}
-                              </span>
-                            )}
-                          </div>
-                          {(line.trackingCode || line.shippingTrackingCode) && (
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 4, fontSize: 11, fontFamily: 'var(--font-mono)' }}>
-                              <span style={{ color: 'var(--admin-text-secondary)' }}>Tracking:</span>
-                              <span style={{ fontWeight: 600 }}>{(line.trackingCode || line.shippingTrackingCode)}</span>
-                              <button
-                                type="button"
-                                onClick={() => handleCopyTracking((line.trackingCode || line.shippingTrackingCode))}
-                                title="Copy tracking code"
-                                style={{ border: 'none', background: 'transparent', cursor: 'pointer', padding: 1 }}
-                              >
-                                {copiedTracking === (line.trackingCode || line.shippingTrackingCode) ? <Check size={11} color="#16a34a" /> : <Copy size={11} />}
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </td>
-
-                    <td className="align-center">
-                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
-                        <span className="admin-status">
-                          <span>{line.status}</span>
-                        </span>
-                        {line.isDelayed && (
+                        {line.documentTypeId?.code && (
                           <span
                             style={{
-                              fontSize: 10,
-                              fontWeight: 700,
-                              padding: '1px 5px',
+                              fontSize: 11,
+                              fontFamily: 'var(--font-mono)',
+                              padding: '2px 7px',
                               borderRadius: 4,
-                              backgroundColor: 'rgba(239, 68, 68, 0.15)',
-                              color: '#dc2626',
+                              backgroundColor: 'var(--admin-surface-2, #f1f5f9)',
+                              border: '1px solid var(--admin-border, #e2e8f0)',
+                              color: 'var(--admin-text-secondary)',
                             }}
                           >
-                            DELAYED
+                            {line.documentTypeId.code}
+                          </span>
+                        )}
+                        {line.documentTypeId?.category && (
+                          <span style={{ fontSize: 11, color: 'var(--admin-text-muted)' }}>
+                            • {line.documentTypeId.category}
                           </span>
                         )}
                       </div>
-                    </td>
+                    </div>
 
-                    <td className="align-right">
-                      {isPending ? (
+                    {/* Right side: Prominent Status Badge + Actions */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                      <span
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 5,
+                          fontSize: 12,
+                          fontWeight: 700,
+                          padding: '4px 10px',
+                          borderRadius: 20,
+                          backgroundColor: statusCfg.bg,
+                          color: statusCfg.color,
+                          border: `1px solid ${statusCfg.border}`,
+                        }}
+                      >
+                        {statusCfg.icon}
+                        <span>{statusCfg.label}</span>
+                      </span>
+
+                      {line.isDelayed && (
+                        <span
+                          style={{
+                            fontSize: 10.5,
+                            fontWeight: 700,
+                            padding: '3px 7px',
+                            borderRadius: 4,
+                            backgroundColor: 'rgba(239, 68, 68, 0.12)',
+                            color: '#dc2626',
+                            border: '1px solid rgba(239, 68, 68, 0.25)',
+                          }}
+                        >
+                          DELAYED
+                        </span>
+                      )}
+
+                      {isPending && (
                         <button
                           type="button"
                           className="btn-admin-icon danger"
                           title="Remove document line"
                           onClick={() => handleRemoveLine(line._id)}
                           disabled={actionLoading || lines.length <= 1}
+                          style={{ padding: 4 }}
                         >
-                          <Trash2 size={13} />
+                          <Trash2 size={14} />
                         </button>
-                      ) : (
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6, flexWrap: 'wrap' }}>
-                          {line.status === 'needed' && (
-                            <button
-                              type="button"
-                              className="btn-admin-secondary"
-                              onClick={() => {
-                                setAdminAttachLine(line);
-                                setAdminAttachFile(null);
-                                setAdminAttachTracking(line.trackingCode || '');
-                                setAdminAttachNote('');
-                                setAdminAttachError('');
-                              }}
-                              style={{ padding: '4px 8px', fontSize: 11, display: 'inline-flex', alignItems: 'center', gap: 4 }}
-                              title="Attach document scan / file to line"
-                            >
-                              <Paperclip size={11} />
-                              <span>Attach</span>
-                            </button>
-                          )}
+                      )}
+                    </div>
+                  </div>
 
-                          {line.status === 'attached' && (
+                  {/* Inline Correction Claim Note */}
+                  {line.correctionReason && (
+                    <div
+                      style={{
+                        marginTop: 10,
+                        padding: '8px 12px',
+                        borderRadius: 6,
+                        backgroundColor: 'rgba(234, 88, 12, 0.08)',
+                        border: '1px solid rgba(234, 88, 12, 0.25)',
+                        fontSize: 12.5,
+                        color: '#c2410c',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 8,
+                      }}
+                    >
+                      <RotateCcw size={14} style={{ flexShrink: 0 }} />
+                      <span><strong>Client Correction Claim:</strong> {line.correctionReason}</span>
+                    </div>
+                  )}
+
+                  {/* Inline Rejection Note Callout */}
+                  {line.status === 'needed' && rejectionNote && (
+                    <div
+                      style={{
+                        marginTop: 10,
+                        padding: '10px 14px',
+                        borderRadius: 6,
+                        backgroundColor: 'rgba(220, 38, 38, 0.08)',
+                        border: '1px solid rgba(220, 38, 38, 0.25)',
+                        fontSize: 13,
+                        color: '#991b1b',
+                        display: 'flex',
+                        alignItems: 'flex-start',
+                        gap: 10,
+                      }}
+                    >
+                      <AlertTriangle size={16} color="#dc2626" style={{ flexShrink: 0, marginTop: 2 }} />
+                      <div style={{ flex: 1, lineHeight: 1.45 }}>
+                        <div style={{ fontWeight: 700, color: '#dc2626' }}>Document Rejected — Action Required</div>
+                        <div style={{ marginTop: 2, color: '#7f1d1d' }}>Note: {rejectionNote}</div>
+                        <div style={{ fontSize: 11.5, color: '#92400e', marginTop: 4 }}>
+                          {currentAssignee ? 'Awaiting corrected upload from assigned associate.' : 'Attach corrected file or delegate to associate.'}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Uploaded / Attached Files List with PROMINENT Print Action */}
+                  {line.uploadedFiles && line.uploadedFiles.length > 0 && (
+                    <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      {line.uploadedFiles.map((f) => (
+                        <div
+                          key={f._id}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            padding: '10px 14px',
+                            backgroundColor: 'var(--admin-surface-2, #f8fafc)',
+                            border: '1px solid var(--admin-border, #e2e8f0)',
+                            borderRadius: 8,
+                            flexWrap: 'wrap',
+                            gap: 10,
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 200, flex: 1 }}>
+                            <div
+                              style={{
+                                width: 36,
+                                height: 36,
+                                borderRadius: 6,
+                                backgroundColor: 'rgba(168, 35, 27, 0.08)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                color: 'var(--admin-accent)',
+                                flexShrink: 0,
+                              }}
+                            >
+                              <FileText size={18} />
+                            </div>
+                            <div>
+                              <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--admin-text-primary)', wordBreak: 'break-all' }}>
+                                {f.filename}
+                              </div>
+                              <div style={{ fontSize: 11, color: 'var(--admin-text-secondary)', marginTop: 2 }}>
+                                {f.size ? `${Math.round(f.size / 1024)} KB` : ''} • Uploaded by {f.uploadedByUserId?.name || 'User'} {f.uploadedByUserId?.role ? `(${f.uploadedByUserId.role})` : ''} • {f.uploadedAt ? new Date(f.uploadedAt).toLocaleDateString() : ''}
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Print / View and Download buttons */}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                             <button
                               type="button"
                               className="btn-admin-primary"
-                              onClick={() => {
-                                setLockLine(line);
-                                setLockApprove(true);
-                                setLockNote('');
-                                setLockError('');
-                              }}
-                              style={{ padding: '4px 8px', fontSize: 11, display: 'inline-flex', alignItems: 'center', gap: 4 }}
-                              title="Review and lock document line"
-                            >
-                              <Lock size={11} />
-                              <span>Review & Lock</span>
-                            </button>
-                          )}
-
-                          {['ready', 'packaged', 'sent_to_client', 'delivered', 'completed'].includes(line.status) && (
-                            <span
-                              className="admin-doc-chip"
+                              onClick={() => handleOpenFile(f._id)}
                               style={{
-                                fontSize: 11,
-                                color: '#16a34a',
-                                borderColor: 'rgba(22, 163, 74, 0.3)',
-                                backgroundColor: 'rgba(22, 163, 74, 0.08)',
+                                padding: '7px 14px',
+                                fontSize: 12.5,
+                                fontWeight: 600,
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: 6,
+                                backgroundColor: '#1e293b',
+                                borderColor: '#1e293b',
                               }}
+                              title="Open file in new tab (native browser print)"
                             >
-                              <CheckCircle2 size={11} style={{ marginRight: 3 }} />
-                              {line.status === 'ready' ? 'Ready' : line.status.replace(/_/g, ' ')}
-                            </span>
-                          )}
+                              <Printer size={14} />
+                              <span>Print / View</span>
+                            </button>
+                            <button
+                              type="button"
+                              className="btn-admin-secondary"
+                              onClick={() => handleDownloadFile(f._id, f.filename)}
+                              style={{
+                                padding: '7px 12px',
+                                fontSize: 12,
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: 5,
+                              }}
+                              title="Download document file directly"
+                            >
+                              <Download size={13} />
+                              <span>Download</span>
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Action & Controls Row */}
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      marginTop: 14,
+                      paddingTop: 12,
+                      borderTop: '1px solid var(--admin-border-subtle, #f1f5f9)',
+                      flexWrap: 'wrap',
+                      gap: 12,
+                    }}
+                  >
+                    {/* Secondary Controls: Send to China & Optional Source */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                      {/* Send to China / Assign Associate control */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <span style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--admin-text-secondary)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                          <UserCheck size={13} />
+                          <span>Delegate:</span>
+                        </span>
+                        <select
+                          className="admin-select"
+                          value={currentAssignee || ''}
+                          onChange={(e) => {
+                            const newAssigneeId = e.target.value;
+                            handleAssigneeChange(line._id, newAssigneeId);
+                            if (newAssigneeId) {
+                              handleSourceChange(line._id, 'china');
+                            }
+                          }}
+                          style={{
+                            fontSize: 12,
+                            height: 32,
+                            padding: '2px 8px',
+                            maxWidth: 210,
+                            backgroundColor: currentAssignee ? 'rgba(37, 99, 235, 0.06)' : undefined,
+                            borderColor: currentAssignee ? '#93c5fd' : undefined,
+                            color: currentAssignee ? '#1d4ed8' : undefined,
+                            fontWeight: currentAssignee ? 600 : 400,
+                          }}
+                        >
+                          <option value="">Handle Locally (Self)</option>
+                          {chinaAssociates.map((u) => (
+                            <option key={u._id} value={u._id}>
+                              🇨🇳 {u.name} (China)
+                            </option>
+                          ))}
+                          {associates.filter((u) => u.role !== 'china_associate').map((u) => (
+                            <option key={u._id} value={u._id}>
+                              Admin: {u.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* Optional Source Tag */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <select
+                          className="admin-select"
+                          value={currentSource || ''}
+                          onChange={(e) => handleSourceChange(line._id, e.target.value)}
+                          style={{
+                            fontSize: 11.5,
+                            height: 32,
+                            padding: '2px 8px',
+                            maxWidth: 130,
+                            color: 'var(--admin-text-secondary)',
+                          }}
+                          title="Optional fulfillment source for cost/reporting (never required)"
+                        >
+                          <option value="">Source: Optional</option>
+                          <option value="local">Local (Algeria)</option>
+                          <option value="china">China</option>
+                        </select>
+                      </div>
+
+                      {/* Courier Tracking Code Display */}
+                      {(line.trackingCode || line.shippingTrackingCode) && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, fontFamily: 'var(--font-mono)' }}>
+                          <span style={{ color: 'var(--admin-text-secondary)' }}>Tracking:</span>
+                          <span style={{ fontWeight: 600 }}>{line.trackingCode || line.shippingTrackingCode}</span>
+                          <button
+                            type="button"
+                            onClick={() => handleCopyTracking(line.trackingCode || line.shippingTrackingCode)}
+                            style={{ border: 'none', background: 'transparent', cursor: 'pointer', padding: 1 }}
+                            title="Copy tracking code"
+                          >
+                            {copiedTracking === (line.trackingCode || line.shippingTrackingCode) ? <Check size={11} color="#16a34a" /> : <Copy size={11} />}
+                          </button>
                         </div>
                       )}
-                    </td>
-                  </tr>
-                );
-              })
-            )}
-          </tbody>
-        </table>
+                    </div>
+
+                    {/* Primary Action Button (High Visual Weight) */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      {line.status === 'needed' && (
+                        <button
+                          type="button"
+                          className="btn-admin-primary"
+                          onClick={() => {
+                            setAdminAttachLine(line);
+                            setAdminAttachFile(null);
+                            setAdminAttachTracking(line.trackingCode || '');
+                            setAdminAttachNote('');
+                            setAdminAttachError('');
+                          }}
+                          style={{
+                            padding: '8px 18px',
+                            fontSize: 13,
+                            fontWeight: 700,
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 8,
+                            boxShadow: '0 2px 4px rgba(168, 35, 27, 0.2)',
+                          }}
+                        >
+                          <Paperclip size={16} />
+                          <span>Attach Document</span>
+                        </button>
+                      )}
+
+                      {line.status === 'attached' && (
+                        <button
+                          type="button"
+                          className="btn-admin-primary"
+                          onClick={() => {
+                            setLockLine(line);
+                            setLockApprove(true);
+                            setLockNote('');
+                            setLockError('');
+                          }}
+                          style={{
+                            padding: '8px 18px',
+                            fontSize: 13,
+                            fontWeight: 700,
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 8,
+                            backgroundColor: '#16a34a',
+                            borderColor: '#16a34a',
+                            boxShadow: '0 2px 4px rgba(22, 163, 74, 0.2)',
+                          }}
+                        >
+                          <Lock size={16} />
+                          <span>Review & Lock Document</span>
+                        </button>
+                      )}
+
+                      {['ready', 'packaged', 'sent_to_client', 'delivered', 'completed'].includes(line.status) && (
+                        <span
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 6,
+                            fontSize: 12.5,
+                            fontWeight: 600,
+                            color: '#16a34a',
+                            padding: '6px 12px',
+                            borderRadius: 6,
+                            backgroundColor: 'rgba(22, 163, 74, 0.08)',
+                            border: '1px solid rgba(22, 163, 74, 0.25)',
+                          }}
+                        >
+                          <CheckCircle2 size={15} />
+                          <span>Document Locked & Ready</span>
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Demoted Translation & Price Meta Info */}
+                  <div
+                    style={{
+                      marginTop: 10,
+                      fontSize: 11.5,
+                      color: 'var(--admin-text-secondary)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 10,
+                      flexWrap: 'wrap',
+                    }}
+                  >
+                    <span>
+                      Translation: <strong>{
+                        line.translationMode === 'original_only'
+                          ? 'Original Only'
+                          : line.translationMode === 'original_plus_translation'
+                          ? 'Original + Translation'
+                          : 'Translation Only'
+                      }</strong>
+                    </span>
+                    <span>•</span>
+                    <span>Client Price: <strong style={{ fontFamily: 'var(--font-mono)' }}>{line.clientPrice?.toLocaleString() ?? 0} DZD</strong></span>
+                    <span>•</span>
+                    <span>Cost Price: <strong style={{ fontFamily: 'var(--font-mono)' }}>{line.costPrice?.toLocaleString() ?? 0} DZD</strong></span>
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
       </div>
 
       {/* Add Document Line Modal */}
