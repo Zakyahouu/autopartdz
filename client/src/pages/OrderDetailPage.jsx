@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { apiFetch } from '../utils/api';
 import {
   ArrowLeft,
@@ -115,13 +115,36 @@ export default function OrderDetailPage() {
   const navigate = useNavigate();
 
   // Concept switcher: 'split' | 'table' | 'dashboard'
+  const [searchParams] = useSearchParams();
   const [activeConcept, setActiveConcept] = useState(() => {
-    return localStorage.getItem('autopartdz_order_detail_concept') || 'split';
+    return searchParams.get('concept') || localStorage.getItem('autopartdz_order_detail_concept') || 'split';
   });
+
+  useEffect(() => {
+    const paramConcept = searchParams.get('concept');
+    if (paramConcept && ['split', 'table', 'dashboard'].includes(paramConcept)) {
+      setActiveConcept(paramConcept);
+      localStorage.setItem('autopartdz_order_detail_concept', paramConcept);
+    }
+  }, [searchParams]);
+
+  useEffect(() => {
+    const handleConceptUpdate = (e) => {
+      const c = e.detail || localStorage.getItem('autopartdz_order_detail_concept') || 'split';
+      setActiveConcept(c);
+    };
+    window.addEventListener('conceptChange', handleConceptUpdate);
+    window.addEventListener('storage', handleConceptUpdate);
+    return () => {
+      window.removeEventListener('conceptChange', handleConceptUpdate);
+      window.removeEventListener('storage', handleConceptUpdate);
+    };
+  }, []);
 
   const handleConceptChange = (concept) => {
     setActiveConcept(concept);
     localStorage.setItem('autopartdz_order_detail_concept', concept);
+    window.dispatchEvent(new CustomEvent('conceptChange', { detail: concept }));
   };
 
   const [order, setOrder] = useState(null);
@@ -1037,6 +1060,27 @@ export default function OrderDetailPage() {
             <Columns size={13} />
             <span>3. 2-Col Dashboard</span>
           </button>
+
+          <Link
+            to="/admin/design-preview"
+            style={{
+              padding: '6px 12px',
+              borderRadius: 4,
+              backgroundColor: 'rgba(56, 189, 248, 0.15)',
+              color: '#38bdf8',
+              fontSize: 12,
+              fontWeight: 700,
+              textDecoration: 'none',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 5,
+              border: '1px solid rgba(56, 189, 248, 0.35)',
+            }}
+            title="Open side-by-side comparison lab"
+          >
+            <Sparkles size={13} />
+            <span>Design Lab →</span>
+          </Link>
         </div>
       </div>
 

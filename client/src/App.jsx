@@ -5,6 +5,7 @@ import LoginPage from './pages/LoginPage';
 import CatalogPage from './pages/CatalogPage';
 import OrdersQueuePage from './pages/OrdersQueuePage';
 import OrderDetailPage from './pages/OrderDetailPage';
+import DesignPreviewPage from './pages/DesignPreviewPage';
 import ClientPortalPage from './pages/ClientPortalPage';
 import PublicTrackingPage from './pages/PublicTrackingPage';
 import ChinaPortalPage from './pages/ChinaPortalPage';
@@ -30,6 +31,7 @@ export default function App() {
             <Route path="orders" element={<OrdersQueuePage />} />
             <Route path="orders/:id" element={<OrderDetailPage />} />
             <Route path="catalog" element={<CatalogPage />} />
+            <Route path="design-preview" element={<DesignPreviewPage />} />
             {/* Backward-compatible redirects */}
             <Route path="document-types" element={<Navigate to="/admin/catalog?tab=documents" replace />} />
             <Route path="car-categories" element={<Navigate to="/admin/catalog?tab=categories" replace />} />
